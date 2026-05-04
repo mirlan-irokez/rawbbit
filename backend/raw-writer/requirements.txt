@@ -1,0 +1,5 @@
+nats-py==2.14.0
+pyarrow==23.0.1
+google-cloud-storage==3.9.0
+pydantic==2.12.5
+pydantic-settings==2.13.1

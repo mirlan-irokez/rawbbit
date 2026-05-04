@@ -1,0 +1,145 @@
+# --- Gateway Connection ---
+gateways:
+  bigquery:
+    connection:
+      # For more information on configuring the connection to your execution engine, visit:
+      # https://sqlmesh.readthedocs.io/en/stable/reference/configuration/#connection
+      # https://sqlmesh.readthedocs.io/en/stable/integrations/engines/bigquery/#connection-options
+      type: bigquery
+      method: oauth
+      project: my-gcp-project-name
+      location: location-name1 # for example europe-north1
+
+default_gateway: bigquery
+
+# --- Model Defaults ---
+model_defaults:
+  dialect: bigquery
+  start: 2026-04-18
+  cron: '@daily'
+
+# --- SQLMesh Variables for promoted events Jinja model ---
+variables:
+  promoted_events:
+    source_table: raw_in_app_event.raw_events_ext
+    raw_fields:
+      - event_id
+      - app_id
+      - environment
+      - event_name
+      - event_timestamp
+      - received_at
+      - user_id
+      - user_pseudo_id
+      - session_id
+      - platform
+      - app_version
+      - os_version
+      - device_model
+      - locale
+      - timezone
+      - event_params_json
+      - user_properties_json
+      - traffic_source_json
+      - geo_json
+      - consent_json
+      - ingest_request_id
+      - ingest_user_agent
+      - ingest_ip_hash
+      - nats_stream
+      - nats_sequence
+      - event_date
+      - hour
+    promoted_fields:
+      - expression: "JSON_VALUE(geo_json, '$.country_code') AS geo_country_code"
+        enabled: true
+        description: ISO country code extracted from geo_json.
+      - expression: "JSON_VALUE(geo_json, '$.country') AS geo_country"
+        enabled: false
+        description: Country name extracted from geo_json.
+      - expression: "JSON_VALUE(geo_json, '$.city') AS geo_city"
+        enabled: false
+        description: City extracted from geo_json.
+      - expression: "JSON_VALUE(geo_json, '$.region') AS geo_region"
+        enabled: false
+        description: Region extracted from geo_json.
+      - expression: "JSON_VALUE(geo_json, '$.timezone') AS geo_timezone"
+        enabled: false
+        description: Geo-derived timezone, named to avoid collision with top-level timezone.
+      - expression: "JSON_VALUE(traffic_source_json, '$.source') AS traffic_source"
+        enabled: false
+        description: Traffic source extracted from traffic_source_json.
+      - expression: "JSON_VALUE(traffic_source_json, '$.medium') AS traffic_medium"
+        enabled: false
+        description: Traffic medium extracted from traffic_source_json.
+      - expression: "JSON_VALUE(traffic_source_json, '$.campaign') AS traffic_campaign"
+        enabled: false
+        description: Traffic campaign extracted from traffic_source_json.
+      - expression: "JSON_VALUE(consent_json, '$.analytics_storage') AS consent_analytics_storage"
+        enabled: false
+        description: Consent value for analytics storage.
+      - expression: "JSON_VALUE(consent_json, '$.ads_storage') AS consent_ads_storage"
+        enabled: false
+        description: Consent value for ads storage.
+      - expression: "JSON_VALUE(consent_json, '$.personalization') AS consent_personalization"
+        enabled: false
+        description: Consent value for personalization.
+      - expression: "JSON_VALUE(event_params_json, '$.product') AS event_params_product"
+        enabled: false
+        description: Product identifier extracted from event_params_json.
+      - expression: "JSON_VALUE(event_params_json, '$.surface') AS event_params_surface"
+        enabled: false
+        description: Surface extracted from event_params_json.
+      - expression: "JSON_VALUE(event_params_json, '$.source_type') AS event_params_source_type"
+        enabled: false
+        description: Source type extracted from event_params_json.
+      - expression: "JSON_VALUE(event_params_json, '$.schema_version') AS event_params_schema_version"
+        enabled: false
+        description: Event schema version extracted from event_params_json.
+      - expression: "JSON_VALUE(event_params_json, '$.page') AS event_params_page"
+        enabled: false
+        description: Page path extracted from event_params_json.
+      - expression: "JSON_VALUE(event_params_json, '$.referrer') AS event_params_referrer"
+        enabled: false
+        description: Referrer extracted from event_params_json.
+      - expression: "JSON_VALUE(event_params_json, '$.dimensions') AS event_params_dimensions"
+        enabled: false
+        description: Dimension list extracted from event_params_json.
+      - expression: "JSON_VALUE(event_params_json, '$.result') AS event_params_result"
+        enabled: false
+        description: Result extracted from event_params_json.
+      - expression: "JSON_VALUE(event_params_json, '$.utm_source') AS event_params_utm_source"
+        enabled: false
+        description: UTM source extracted from event_params_json.
+      - expression: "JSON_VALUE(event_params_json, '$.utm_medium') AS event_params_utm_medium"
+        enabled: false
+        description: UTM medium extracted from event_params_json.
+      - expression: "JSON_VALUE(event_params_json, '$.utm_campaign') AS event_params_utm_campaign"
+        enabled: false
+        description: UTM campaign extracted from event_params_json.
+      - expression: "JSON_VALUE(event_params_json, '$.trigger') AS event_params_trigger"
+        enabled: false
+        description: Trigger extracted from event_params_json.
+      - expression: "JSON_VALUE(event_params_json, '$.view') AS event_params_view"
+        enabled: false
+        description: View extracted from event_params_json.
+      - expression: "SAFE_CAST(JSON_VALUE(event_params_json, '$.is_pro') AS BOOL) AS event_params_is_pro"
+        enabled: false
+        description: Boolean flag indicating pro status from event_params_json.
+      - expression: "SAFE_CAST(JSON_VALUE(event_params_json, '$.has_capture') AS BOOL) AS event_params_has_capture"
+        enabled: false
+        description: Boolean flag indicating capture support from event_params_json.
+      - expression: "JSON_VALUE(user_properties_json, '$.plan_tier') AS user_properties_plan_tier"
+        enabled: false
+        description: Example user plan tier from user_properties_json.
+      - expression: "JSON_VALUE(user_properties_json, '$.ab_group') AS user_properties_ab_group"
+        enabled: false
+        description: Example user AB group from user_properties_json.
+
+# --- Linting Rules ---
+linter:
+  enabled: true
+  rules:
+    - ambiguousorinvalidcolumn
+    - invalidselectstarexpansion
+    - noambiguousprojections

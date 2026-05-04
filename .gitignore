@@ -1,0 +1,41 @@
+# ----------------------------
+# OS / IDE
+# ----------------------------
+.idea/
+.DS_Store
+./.DS_Store
+.vscode/
+
+venv/
+.venv/
+.venv*/
+
+venv*/
+node_modules/
+
+__pycache__/
+*.pyc
+*.env
+.env
+*.log
+
+# ----------------------------
+# SQLMesh local artifacts
+# ----------------------------
+.cache/
+.sqlmesh/
+.logs/
+logs/
+*.log
+
+# SQLMesh generated DAG / reports if you create them locally
+dag.html
+sqlmesh_dag.html
+
+# ----------------------------
+# Local databases
+# ----------------------------
+*.db
+*.duckdb
+*.sqlite
+*.sqlite3

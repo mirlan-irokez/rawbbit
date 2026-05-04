@@ -1,0 +1,82 @@
+# Rename file to docker-compose.yml to run.
+services:
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - nats-data:/data
+
+  collector-api:
+    image: ${IMAGE_LOCATION_ADDRESS}:{version}
+    build:
+      context: ../backend/collector-api
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    env_file:
+      - .env
+    environment:
+      PORT: ${PORT:-8080}
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      NATS_STREAM: ${NATS_STREAM:-EVENTS}
+      NATS_SUBJECT_PREFIX: ${NATS_SUBJECT_PREFIX:-events}
+      NATS_STREAM_MAX_AGE_SECONDS: ${NATS_STREAM_MAX_AGE_SECONDS:-604800}
+      NATS_DUPLICATE_WINDOW_SECONDS: ${NATS_DUPLICATE_WINDOW_SECONDS:-600}
+      MAX_EVENTS_PER_REQUEST: ${MAX_EVENTS_PER_REQUEST:-500}
+      MAX_REQUEST_BYTES: ${MAX_REQUEST_BYTES:-1048576}
+      COLLECTOR_API_KEYS_JSON: ${COLLECTOR_API_KEYS_JSON}
+      IP_HASH_SALT: ${IP_HASH_SALT}
+      STORE_RAW_IP: ${STORE_RAW_IP:-0}
+      GEOIP_ENABLED: ${GEOIP_ENABLED:-1}
+      GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-/var/lib/geoip/dbip-country-lite.mmdb}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./geoip/dbip-country-lite-2026-04.mmdb:/var/lib/geoip/dbip-country-lite.mmdb:ro
+    depends_on:
+      - nats
+
+  raw-writer:
+    image: ${IMAGE_LOCATION_ADDRESS}:{version}
+    build:
+      context: ../backend/raw-writer
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    env_file:
+      - .env
+    environment:
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      NATS_STREAM: ${NATS_STREAM:-EVENTS}
+      NATS_SUBJECT_PREFIX: ${NATS_SUBJECT_PREFIX:-events}
+      NATS_CONSUMER: ${NATS_CONSUMER:-raw-writer}
+      NATS_FETCH_BATCH: ${NATS_FETCH_BATCH:-200}
+      NATS_FETCH_TIMEOUT_SECONDS: ${NATS_FETCH_TIMEOUT_SECONDS:-1}
+      NATS_ACK_WAIT_SECONDS: ${NATS_ACK_WAIT_SECONDS:-120}
+      NATS_MAX_DELIVER: ${NATS_MAX_DELIVER:-10}
+      RAW_FLUSH_INTERVAL_SECONDS: ${RAW_FLUSH_INTERVAL_SECONDS:-60}
+      RAW_MAX_EVENTS_PER_FILE: ${RAW_MAX_EVENTS_PER_FILE:-1000}
+      RAW_MAX_BYTES_PER_FILE: ${RAW_MAX_BYTES_PER_FILE:-4194304}
+      GCS_RAW_BUCKET: ${GCS_RAW_BUCKET}
+      GCS_RAW_PREFIX: ${GCS_RAW_PREFIX:-raw}
+      GOOGLE_APPLICATION_CREDENTIALS: /var/secrets/gcp/sa.json
+    # If running outside GCP with a service account JSON key, mount it:
+    volumes:
+      - /home/deploy/data-query/data-query-gcs-object-creator.json:/var/secrets/gcp/sa.json:ro
+    depends_on:
+      - nats
+
+volumes:
+  nats-data:

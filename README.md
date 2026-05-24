@@ -6,6 +6,8 @@ The system is designed to stay portable and maintainable for small teams operati
 
 It accepts batched events over HTTP, validates and enriches them in the collector, buffers them through [NATS JetStream](https://nats.io/), writes partitioned Parquet files to object storage, and includes a small [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) starter project for querying the raw layer through BigQuery external tables.
 
+![DataQueryEvent](./assets/DataQueryEvent.png)
+
 Current public runtime shape:
 
 ```text

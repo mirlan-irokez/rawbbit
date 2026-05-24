@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from raw_writer.partitioning import event_partition, gcs_partition_path
+from raw_writer.partitioning import event_partition, object_partition_path
 
 
 class PartitioningTests(unittest.TestCase):
@@ -16,9 +16,13 @@ class PartitioningTests(unittest.TestCase):
         self.assertEqual(event_date, "2026-03-16")
         self.assertEqual(hour, "20")
 
-    def test_gcs_partition_path(self) -> None:
-        path = gcs_partition_path("raw/", "mygame", "2026-03-16", "20", "part-1.parquet")
+    def test_object_partition_path(self) -> None:
+        path = object_partition_path("raw/", "mygame", "2026-03-16", "20", "part-1.parquet")
         self.assertEqual(path, "raw/app_id=mygame/event_date=2026-03-16/hour=20/part-1.parquet")
+
+    def test_object_partition_path_empty_prefix(self) -> None:
+        path = object_partition_path("", "mygame", "2026-03-16", "20", "part-1.parquet")
+        self.assertEqual(path, "app_id=mygame/event_date=2026-03-16/hour=20/part-1.parquet")
 
 
 if __name__ == "__main__":

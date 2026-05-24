@@ -61,26 +61,46 @@ These settings control how aggressively queued events are batched and flushed in
 
 Main variables:
 
+- `RAW_STORAGE_BACKEND` (`gcs` or `s3`)
+
+GCS mode:
+
 - `GCS_RAW_BUCKET`
 - `GCS_RAW_PREFIX`
 - `GOOGLE_APPLICATION_CREDENTIALS`
 
+S3-compatible mode:
+
+- `S3_ENDPOINT_URL`
+- `S3_BUCKET`
+- `S3_PREFIX`
+- `S3_ACCESS_KEY`
+- `S3_SECRET_KEY`
+- `S3_REGION`
+- `S3_FORCE_PATH_STYLE`
+- `S3_USE_SSL`
+- `S3_VERIFY_SSL`
+
 Notes:
 
-- `GCS_RAW_BUCKET` is required for durable raw landing
-- `GCS_RAW_PREFIX` defaults to `raw`
-- in the current deployment, `GOOGLE_APPLICATION_CREDENTIALS` usually points to the mounted service-account JSON inside the container
+- `RAW_STORAGE_BACKEND` selects the raw landing target
+- `GCS_RAW_BUCKET` is required when `RAW_STORAGE_BACKEND=gcs`
+- `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY`, and `S3_SECRET_KEY` are required when `RAW_STORAGE_BACKEND=s3`
+- `GCS_RAW_PREFIX` and `S3_PREFIX` default to `raw`
+- in GCS deployments, `GOOGLE_APPLICATION_CREDENTIALS` usually points to the mounted service-account JSON inside the container
+- `S3_FORCE_PATH_STYLE=1` is the practical default for many S3-compatible systems, including [SeaweedFS](https://github.com/seaweedfs/seaweedfs)
 
 ## Raw partition layout
 
 Expected object layout:
 
 ```text
-<GCS_RAW_PREFIX>/app_id=<app_id>/event_date=YYYY-MM-DD/hour=HH/
+<RAW_PREFIX>/app_id=<app_id>/event_date=YYYY-MM-DD/hour=HH/
 ```
 
 - `event_date` and `hour` are derived from `event_timestamp` when valid
 - otherwise they fall back to collector receive time
+- `RAW_PREFIX` means `GCS_RAW_PREFIX` in GCS mode or `S3_PREFIX` in S3-compatible mode
 
 ## Raw Parquet columns
 

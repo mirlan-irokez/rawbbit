@@ -26,6 +26,13 @@ def event_partition(event_timestamp: str | None, fallback_timestamp: str | None)
     return parsed.strftime("%Y-%m-%d"), parsed.strftime("%H")
 
 
-def gcs_partition_path(prefix: str, app_id: str, event_date: str, hour: str, filename: str) -> str:
+def object_partition_path(prefix: str, app_id: str, event_date: str, hour: str, filename: str) -> str:
     cleaned_prefix = prefix.strip("/")
-    return f"{cleaned_prefix}/app_id={app_id}/event_date={event_date}/hour={hour}/{filename}"
+    suffix = f"app_id={app_id}/event_date={event_date}/hour={hour}/{filename}"
+    if not cleaned_prefix:
+        return suffix
+    return f"{cleaned_prefix}/{suffix}"
+
+
+def gcs_partition_path(prefix: str, app_id: str, event_date: str, hour: str, filename: str) -> str:
+    return object_partition_path(prefix, app_id, event_date, hour, filename)

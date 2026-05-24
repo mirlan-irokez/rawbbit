@@ -2,6 +2,10 @@
 
 This quickstart walks through the supported local validation path for the public DataQueryEvent stack.
 
+Scope note:
+- this quickstart includes both supported raw-storage backends for local validation
+- if you want the documented BigQuery external-table query path afterward, use GCS
+
 ## Prerequisites
 
 You need:
@@ -9,8 +13,9 @@ You need:
 - Docker and Docker Compose
 - a local clone of the repository
 - a machine or VM that can run Docker Compose
-- a GCS bucket for raw output
-- a GCP service account that can write objects to that bucket
+- one raw-storage target:
+  - either a GCS bucket plus GCP credentials (GCP service account that can write objects to that bucket)
+  - or an S3-compatible bucket plus endpoint/credentials
 
 ## 1. Prepare the environment file
 
@@ -25,19 +30,40 @@ Set at least these values:
 ```text
 COLLECTOR_API_KEYS_JSON={"dev-api-key":"com.example.app"}
 IP_HASH_SALT=replace_me
+RAW_STORAGE_BACKEND=gcs
 GCS_RAW_BUCKET=your-bucket-name
 GCS_RAW_PREFIX=raw
 ```
 
+For S3-compatible mode instead, set:
+
+```text
+COLLECTOR_API_KEYS_JSON={"dev-api-key":"com.example.app"}
+IP_HASH_SALT=replace_me
+RAW_STORAGE_BACKEND=s3
+S3_ENDPOINT_URL=http://seaweedfs:8333
+S3_BUCKET=your-bucket-name
+S3_PREFIX=raw
+S3_ACCESS_KEY=your-access-key
+S3_SECRET_KEY=your-secret-key
+S3_REGION=us-east-1
+S3_FORCE_PATH_STYLE=1
+S3_USE_SSL=0
+S3_VERIFY_SSL=0
+```
+
 ## 2. Prepare credentials for `raw-writer`
 
-The current Compose setup expects a service-account key inside the container at:
+For GCS mode, the current Compose setup expects a service-account key inside the container at:
 
 ```text
 /var/secrets/gcp/sa.json
 ```
 
 Before starting the stack, update the host-side mount in `deploy/docker-compose.yml` so it points to your real key file.
+
+For S3-compatible mode, no Google key is needed.
+Instead, make sure the configured endpoint and bucket are reachable and the `S3_*` values are correct.
 
 ## 3. Start the stack
 
@@ -72,7 +98,7 @@ A successful validation means:
 
 - the collector accepted the batch
 - the event was published into JetStream
-- `raw-writer` flushed a Parquet object to the configured bucket
+- `raw-writer` flushed a Parquet object to the configured storage backend
 
 Expected partition layout:
 
@@ -85,9 +111,9 @@ raw/app_id=com.example.app/event_date=YYYY-MM-DD/hour=HH/
 If the flow does not complete, check:
 
 - invalid or missing `X-API-Key`
-- missing `GCS_RAW_BUCKET`
-- wrong mounted service-account path
-- collector running but writer unable to authenticate to GCS
+- missing required storage-backend settings
+- wrong mounted service-account path for GCS mode
+- collector running but writer unable to authenticate to the selected storage backend
 - NATS healthy but writer not consuming
 
 ## Next

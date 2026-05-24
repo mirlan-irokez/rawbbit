@@ -69,12 +69,24 @@ services:
       RAW_FLUSH_INTERVAL_SECONDS: ${RAW_FLUSH_INTERVAL_SECONDS:-60}
       RAW_MAX_EVENTS_PER_FILE: ${RAW_MAX_EVENTS_PER_FILE:-1000}
       RAW_MAX_BYTES_PER_FILE: ${RAW_MAX_BYTES_PER_FILE:-4194304}
+      RAW_STORAGE_BACKEND: ${RAW_STORAGE_BACKEND:-gcs}
       GCS_RAW_BUCKET: ${GCS_RAW_BUCKET}
       GCS_RAW_PREFIX: ${GCS_RAW_PREFIX:-raw}
-      GOOGLE_APPLICATION_CREDENTIALS: /var/secrets/gcp/sa.json
-    # If running outside GCP with a service account JSON key, mount it:
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/var/secrets/gcp/sa.json}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_PREFIX: ${S3_PREFIX:-raw}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-1}
+      S3_USE_SSL: ${S3_USE_SSL:-0}
+      S3_VERIFY_SSL: ${S3_VERIFY_SSL:-0}
+    # If using GCS outside GCP with a service account JSON key, mount it and set
+    # GOOGLE_APPLICATION_CREDENTIALS to the in-container path in deploy/.env.
+    # Example mount (optional for GCS mode, typically unused for S3 mode):
     volumes:
-      - /home/deploy/data-query/data-query-gcs-object-creator.json:/var/secrets/gcp/sa.json:ro
+      - /home/deploy/gcp-sa.json:/var/secrets/gcp/sa.json:ro
     depends_on:
       - nats
 

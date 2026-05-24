@@ -10,11 +10,11 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import uuid4
 
-from raw_writer.gcs_client import GCSUploader
 from raw_writer.nats_consumer import NATSConsumer
 from raw_writer.parquet_writer import write_rows_to_temp_parquet
-from raw_writer.partitioning import gcs_partition_path
+from raw_writer.partitioning import object_partition_path
 from raw_writer.settings import get_settings
+from raw_writer.storage import build_object_storage_uploader
 from raw_writer.transformer import event_to_row
 
 logging.basicConfig(
@@ -50,19 +50,22 @@ class RawWriterService:
     def __init__(self) -> None:
         self.settings = get_settings()
         self.consumer = NATSConsumer(self.settings)
-        self.uploader = GCSUploader(self.settings.gcs_raw_bucket)
+        self.uploader = build_object_storage_uploader(self.settings)
         self.buffers: dict[tuple[str, str, str], BufferState] = defaultdict(BufferState)
         self.last_flush = datetime.now(UTC)
         self.last_successful_flush: datetime | None = None
 
         credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+        storage_bucket = self.settings.gcs_raw_bucket if self.settings.raw_storage_backend == "gcs" else self.settings.s3_bucket
+        storage_prefix = self.settings.gcs_raw_prefix if self.settings.raw_storage_backend == "gcs" else self.settings.s3_prefix
         logger.info(
-            "startup nats_url=%s stream=%s consumer=%s gcs_bucket=%s gcs_prefix=%s flush_interval_seconds=%s max_events_per_file=%s max_bytes_per_file=%s credentials_path_set=%s",
+            "startup nats_url=%s stream=%s consumer=%s storage_backend=%s storage_bucket=%s storage_prefix=%s flush_interval_seconds=%s max_events_per_file=%s max_bytes_per_file=%s google_credentials_path_set=%s",
             _redacted_url(self.settings.nats_url),
             self.settings.nats_stream,
             self.settings.nats_consumer,
-            self.settings.gcs_raw_bucket,
-            self.settings.gcs_raw_prefix,
+            self.settings.raw_storage_backend,
+            storage_bucket,
+            storage_prefix,
             self.settings.raw_flush_interval_seconds,
             self.settings.raw_max_events_per_file,
             self.settings.raw_max_bytes_per_file,
@@ -113,8 +116,9 @@ class RawWriterService:
             state.approx_bytes,
         )
         filename = f"part-{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}-{uuid4().hex[:12]}.parquet"
-        object_path = gcs_partition_path(
-            prefix=self.settings.gcs_raw_prefix,
+        prefix = self.settings.gcs_raw_prefix if self.settings.raw_storage_backend == "gcs" else self.settings.s3_prefix
+        object_path = object_partition_path(
+            prefix=prefix,
             app_id=app_id,
             event_date=event_date,
             hour=hour,
@@ -130,13 +134,14 @@ class RawWriterService:
                 await msg.ack()
             self.last_successful_flush = datetime.now(UTC)
             logger.info(
-                "flush_success app_id=%s event_date=%s hour=%s rows=%s parquet_bytes=%s acked_messages=%s gcs_object_path=%s",
+                "flush_success app_id=%s event_date=%s hour=%s rows=%s parquet_bytes=%s acked_messages=%s storage_backend=%s object_path=%s",
                 app_id_safe,
                 event_date,
                 hour,
                 len(state.rows),
                 parquet_bytes,
                 len(state.msgs),
+                self.settings.raw_storage_backend,
                 object_path,
             )
         except Exception as exc:

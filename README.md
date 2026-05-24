@@ -18,6 +18,10 @@ Current public query path:
 Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> BigQuery external table -> SQLMesh base model
 ```
 
+Storage note:
+- raw landing supports either GCS or an S3-compatible backend such as [SeaweedFS](https://github.com/seaweedfs/seaweedfs)
+- the documented BigQuery external-table path remains GCS-based
+
 ## Table of contents
 
 - [What is included](#what-is-included)
@@ -99,6 +103,7 @@ Current maturity:
 
 - ingestion path is implemented
 - raw Parquet landing path is implemented
+- raw storage backend selection is implemented for both GCS and S3-compatible targets
 - BigQuery external-table querying is supported
 - [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) is included as a starter downstream layer
 

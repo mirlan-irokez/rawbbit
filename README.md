@@ -20,6 +20,11 @@ Current public query path:
 Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> BigQuery external table -> SQLMesh base model
 ```
 
+Optional downstream analytics UI path:
+```text
+Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> BigQuery external table -> SQLMesh base model -> Metabase OSS
+```
+
 Storage note:
 - raw landing supports either GCS or an S3-compatible backend such as [SeaweedFS](https://github.com/seaweedfs/seaweedfs)
 - the documented BigQuery external-table path remains GCS-based
@@ -43,6 +48,7 @@ This repository contains the public ingestion-to-raw-storage path:
 - `backend/raw-writer` — JetStream consumer that writes partitioned Parquet files
 - `deploy/` — Docker Compose and environment scaffolding for local or simple self-hosted setups
 - `sqlmesh_project/` — starter [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) project for reading the raw external-table layer
+- `metabase/` — Optional downstream Metabase deployment guide
 
 ## Architecture
 
@@ -89,6 +95,7 @@ backend/
   raw-writer/      Parquet landing worker
 deploy/            Local and self-hosted runtime scaffolding
 sqlmesh_project/   Starter downstream modeling project
+metabase/          Metabase OSS ver. deploy instructions
 docs/              OSS documentation
 ```
 
@@ -98,6 +105,7 @@ Component reference notes:
 - [`backend/collector-api/README.md`](backend/collector-api/README.md)
 - [`backend/raw-writer/README.md`](backend/raw-writer/README.md)
 - [`deploy/README.md`](deploy/README.md)
+- [`metabase/README.md`](metabase/README.md)
 
 ## Project status
 

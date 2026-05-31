@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: metabase-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - metabase_postgres_data:/var/lib/postgresql
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+
+  metabase:
+    image: metabase/metabase:latest
+    container_name: metabase
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: ${POSTGRES_DB}
+      MB_DB_PORT: 5432
+      MB_DB_HOST: postgres
+      MB_DB_USER: ${POSTGRES_USER}
+      MB_DB_PASS: ${POSTGRES_PASSWORD}
+      JAVA_TIMEZONE: Europe/Helsinki
+      MB_SITE_URL: https://${METABASE_DOMAIN}
+    networks:
+      - internal
+      - web
+    security_opt:
+      - no-new-privileges:true
+
+  caddy:
+    image: caddy:2
+    container_name: metabase-caddy
+    restart: unless-stopped
+    depends_on:
+      - metabase
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - web
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  metabase_postgres_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+    internal: true
+  web:

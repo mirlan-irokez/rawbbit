@@ -20,7 +20,7 @@ services:
       - no-new-privileges:true
 
   metabase:
-    image: metabase/metabase:latest
+    image: metabase/metabase:0.61.2.16 # metabase/metabase:latest
     container_name: metabase
     restart: unless-stopped
     depends_on:

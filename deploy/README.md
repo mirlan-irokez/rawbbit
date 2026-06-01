@@ -1,6 +1,6 @@
 # Deploy
 
-The `deploy/` folder contains the reference scaffolding for running the public DataQueryEvent stack in local or simple self-hosted environments.
+The `deploy/` folder contains the reference scaffolding for running the public Rawbbit stack in local or simple self-hosted environments.
 
 ## What is here
 

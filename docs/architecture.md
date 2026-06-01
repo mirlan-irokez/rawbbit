@@ -2,7 +2,7 @@
 
 ## Overview
 
-DataQueryEvent is a self-hosted ingestion and raw-storage pipeline for analytics events.
+Rawbbit is a self-hosted ingestion and raw-storage pipeline for analytics events.
 
 Current runtime boundary:
 

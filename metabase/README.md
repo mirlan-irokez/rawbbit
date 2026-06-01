@@ -1,13 +1,13 @@
-# Metabase in the DataQuery stack
+# Metabase in the Rawbbit stack
 
-DataQuery’s current responsibility ends at durable raw event landing: events are collected, buffered through NATS JetStream, and written as partitioned Parquet files to object storage.
-Metabase is not part of that ingestion runtime. It is an optional self-hosted analytics layer you can place downstream once DataQuery data is available in a warehouse or other query surface.
+Rawbbit’s current responsibility ends at durable raw event landing: events are collected, buffered through NATS JetStream, and written as partitioned Parquet files to object storage.
+Metabase is not part of that ingestion runtime. It is an optional self-hosted analytics layer you can place downstream once Rawbbit data is available in a warehouse or other query surface.
 
-Use this guide if you want to run an open source Metabase instance on your own VM for exploring DataQuery data, building internal dashboards, and giving yourself a lightweight BI interface without depending on a managed SaaS setup.
+Use this guide if you want to run an open source Metabase instance on your own VM for exploring Rawbbit data, building internal dashboards, and giving yourself a lightweight BI interface without depending on a managed SaaS setup.
 
 In other words:
 ```text
-DataQuery raw layer -> warehouse / query layer -> Metabase
+Rawbbit raw layer -> warehouse / query layer -> Metabase
 ```
 This guide covers a simple production-minded single-VM deployment of Metabase OSS with PostgreSQL and Caddy.
 

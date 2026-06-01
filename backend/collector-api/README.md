@@ -1,6 +1,6 @@
 # Collector API
 
-`collector-api` is the public ingestion edge for DataQueryEvent.
+`collector-api` is the public ingestion edge for Rawbbit.
 
 ## Responsibilities
 

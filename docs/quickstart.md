@@ -1,6 +1,6 @@
 # Quickstart
 
-This quickstart walks through the supported local validation path for the public DataQueryEvent stack.
+This quickstart walks through the supported local validation path for the public Rawbbit stack.
 
 Scope note:
 - this quickstart includes both supported raw-storage backends for local validation

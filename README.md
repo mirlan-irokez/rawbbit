@@ -1,12 +1,12 @@
-# DataQueryEvent
+# Rawbbit
 
-DataQueryEvent is a self-hosted in-app event tracking, ingestion, and raw-storage pipeline for product, application, and game analytics.
+Rawbbit is a self-hosted in-app event tracking, ingestion, and raw-storage pipeline for product, application, and game analytics.
 It was created for teams that want to keep control of their event data, reduce vendor lock-in, and run analytics infrastructure without depending on heavyweight enterprise platforms. 
 The system is designed to stay portable and maintainable for small teams operating their own stack.
 
 It accepts batched events over HTTP, validates and enriches them in the collector, buffers them through [NATS JetStream](https://nats.io/), writes partitioned Parquet files to object storage, and includes a small [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) starter project for querying the raw layer through BigQuery external tables.
 
-![DataQueryEvent](./assets/DataQueryEvent.png)
+![Rawbbit](./assets/Rawbbit.png)
 
 Current public runtime shape:
 

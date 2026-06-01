@@ -1,6 +1,6 @@
 # Backend
 
-The `backend/` folder contains the executable ingestion-side services in DataQueryEvent.
+The `backend/` folder contains the executable ingestion-side services in Rawbbit.
 
 ## Components
 

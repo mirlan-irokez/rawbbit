@@ -120,3 +120,4 @@ If the flow does not complete, check:
 
 - `architecture.md`
 - `configuration.md`
+- `../clickhouse/README.md` for the ClickHouse query path

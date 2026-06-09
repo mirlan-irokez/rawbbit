@@ -16,6 +16,12 @@ Current downstream query path included in the repository:
 Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> BigQuery external table -> SQLMesh base model
 ```
 
+ClickHouse serving path:
+
+```text
+Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> ClickHouse
+```
+
 ## Components
 
 ### Collector API
@@ -69,6 +75,14 @@ The repository includes a small [SQLMesh](https://sqlmesh.readthedocs.io/en/stab
 
 It exists as a starter downstream path, not as the center of the runtime architecture.
 
+### ClickHouse serving layer
+
+ClickHouse can be added as a downstream query layer over raw Parquet.
+
+In this shape, ClickHouse is not the ingestion source of truth. It is a serving analytical database that can query raw files directly or load them into local `MergeTree` tables for faster analytics.
+
+See [`../clickhouse/README.md`](../clickhouse/README.md).
+
 ## Design choices
 
 ### Raw-first storage boundary
@@ -81,7 +95,7 @@ The collector and raw writer are intentionally separated by a durable message la
 
 ### Portable downstream path
 
-The current repository includes a BigQuery external-table path and a small SQLMesh starter model, but the raw storage boundary remains the stable handoff point.
+The current repository includes a BigQuery external-table path, a small SQLMesh starter model, and an optional ClickHouse serving path, but the raw storage boundary remains the stable handoff point.
 
 ## Delivery semantics
 

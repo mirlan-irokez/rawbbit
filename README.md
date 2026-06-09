@@ -14,10 +14,16 @@ Current public runtime shape:
 Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet in object storage
 ```
 
-Current public query path:
+BigQuery query path:
 
 ```text
 Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> BigQuery external table -> SQLMesh base model
+```
+
+ClickHouse serving path:
+
+```text
+Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> ClickHouse
 ```
 
 Optional downstream analytics UI path:
@@ -48,6 +54,7 @@ This repository contains the public ingestion-to-raw-storage path:
 - `backend/raw-writer` — JetStream consumer that writes partitioned Parquet files
 - `deploy/` — Docker Compose and environment scaffolding for local or simple self-hosted setups
 - `sqlmesh_project/` — starter [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) project for reading the raw external-table layer
+- `clickhouse/` — optional downstream ClickHouse guide for loading/querying raw Parquet
 - `metabase/` — Optional downstream Metabase deployment guide
 
 ## Architecture
@@ -95,6 +102,7 @@ backend/
   raw-writer/      Parquet landing worker
 deploy/            Local and self-hosted runtime scaffolding
 sqlmesh_project/   Starter downstream modeling project
+clickhouse/        ClickHouse downstream query path
 metabase/          Metabase OSS ver. deploy instructions
 docs/              OSS documentation
 ```
@@ -105,6 +113,7 @@ Component reference notes:
 - [`backend/collector-api/README.md`](backend/collector-api/README.md)
 - [`backend/raw-writer/README.md`](backend/raw-writer/README.md)
 - [`deploy/README.md`](deploy/README.md)
+- [`clickhouse/README.md`](clickhouse/README.md)
 - [`metabase/README.md`](metabase/README.md)
 
 ## Project status
@@ -115,6 +124,7 @@ Current maturity:
 - raw Parquet landing path is implemented
 - raw storage backend selection is implemented for both GCS and S3-compatible targets
 - BigQuery external-table querying is supported
+- ClickHouse can be used as a downstream serving/query layer over the raw Parquet boundary and in general as main analytical database
 - [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) is included as a starter downstream layer
 
 The current release is intentionally narrow: it focuses on reliable ingestion, durable raw storage, and a simple first query path.
@@ -126,6 +136,7 @@ The included [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) model is inten
 - [`docs/architecture.md`](docs/architecture.md)
 - [`docs/quickstart.md`](docs/quickstart.md)
 - [`docs/configuration.md`](docs/configuration.md)
+- [`clickhouse/README.md`](clickhouse/README.md)
 
 ## License
 

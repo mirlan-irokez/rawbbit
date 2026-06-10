@@ -141,3 +141,9 @@ The included [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) model is inten
 ## License
 
 This project is released under the Apache License 2.0. See [`LICENSE`](LICENSE).
+
+---
+
+## Inspired by
+
+- [awesome-data-engineering](https://github.com/igorbarinov/awesome-data-engineering) — for the broader data engineering ecosystem

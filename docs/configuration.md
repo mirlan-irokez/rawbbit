@@ -114,3 +114,53 @@ Current raw output includes:
 - `nats_stream`, `nats_sequence`
 
 The raw layer stays intentionally simple and mostly string-typed for compatibility and portability.
+
+## Downstream ClickHouse MCP and Metabase settings
+
+The ingestion runtime uses `deploy/.env.example` as its canonical configuration reference.
+
+The optional ClickHouse MCP and combined Metabase deployment has its own environment file under `clickhouse-mcp/.env.example` in the public repository.
+
+Main MCP settings:
+
+- `MCP_DOMAIN`
+- `MCP_PATH`
+- `MCP_BIND_HOST_PORT`
+- `MCP_MAX_QUERY_ROWS`
+- `MCP_MAX_SAMPLE_ROWS`
+- `MCP_MAX_EXECUTION_SECONDS`
+- `MCP_API_KEYS_JSON`
+- `MCP_JWT_PUBLIC_KEY`
+- `MCP_JWT_JWKS_URI`
+- `MCP_JWT_ISSUER`
+- `MCP_JWT_AUDIENCE`
+
+Main ClickHouse connection settings:
+
+- `CLICKHOUSE_HOST`
+- `CLICKHOUSE_PORT`
+- `CLICKHOUSE_USER`
+- `CLICKHOUSE_PASSWORD`
+- `CLICKHOUSE_DATABASE`
+- `CLICKHOUSE_TABLE`
+- `CLICKHOUSE_SECURE`
+- `CLICKHOUSE_VERIFY`
+
+Main Metabase settings:
+
+- `METABASE_DOMAIN`
+- `METABASE_BIND_HOST_PORT`
+- `POSTGRES_DB`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `METABASE_TIMEZONE`
+
+Notes:
+
+- `MCP_API_KEYS_JSON` is a JSON map of `{ "label": "bearer_token" }`
+- real bearer tokens, ClickHouse passwords, and PostgreSQL passwords must stay out of git
+- client configs such as `opencode.jsonc` and `openclaw.json` should use placeholders, environment variables, or private local secret files rather than committed tokens
+- ClickHouse should be reachable from the MCP container, but ClickHouse ports should not be casually exposed to the public internet
+- Metabase uses PostgreSQL for application data in the combined deployment
+
+For the deployment walkthrough, see [`../clickhouse-mcp/README.md`](../clickhouse-mcp/README.md).

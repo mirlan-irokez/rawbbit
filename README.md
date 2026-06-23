@@ -26,6 +26,18 @@ ClickHouse serving path:
 Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> ClickHouse
 ```
 
+ClickHouse MCP and Metabase path:
+
+```text
+Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> ClickHouse -> MCP / Metabase
+```
+
+AI agent access path:
+
+```text
+Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> ClickHouse -> MCP -> AI agents
+```
+
 Optional downstream analytics UI path:
 ```text
 Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> BigQuery external table -> SQLMesh base model -> Metabase OSS
@@ -55,6 +67,8 @@ This repository contains the public ingestion-to-raw-storage path:
 - `deploy/` — Docker Compose and environment scaffolding for local or simple self-hosted setups
 - `sqlmesh_project/` — starter [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) project for reading the raw external-table layer
 - `clickhouse/` — optional downstream ClickHouse guide for loading/querying raw Parquet
+- `clickhouse-mcp/` — optional ClickHouse-backed MCP server and combined MCP + Metabase deployment guide
+- AI agents and MCP clients such as OpenCode or OpenClaw can connect to the ClickHouse MCP endpoint for read-only analytics exploration
 - `metabase/` — Optional downstream Metabase deployment guide
 
 ## Architecture
@@ -103,6 +117,7 @@ backend/
 deploy/            Local and self-hosted runtime scaffolding
 sqlmesh_project/   Starter downstream modeling project
 clickhouse/        ClickHouse downstream query path
+clickhouse-mcp/    ClickHouse MCP and optional Metabase deploy path
 metabase/          Metabase OSS ver. deploy instructions
 docs/              OSS documentation
 ```
@@ -114,6 +129,7 @@ Component reference notes:
 - [`backend/raw-writer/README.md`](backend/raw-writer/README.md)
 - [`deploy/README.md`](deploy/README.md)
 - [`clickhouse/README.md`](clickhouse/README.md)
+- [`clickhouse-mcp/README.md`](clickhouse-mcp/README.md)
 - [`metabase/README.md`](metabase/README.md)
 
 ## Project status
@@ -125,6 +141,9 @@ Current maturity:
 - raw storage backend selection is implemented for both GCS and S3-compatible targets
 - BigQuery external-table querying is supported
 - ClickHouse can be used as a downstream serving/query layer over the raw Parquet boundary and in general as main analytical database
+- ClickHouse MCP can expose a read-only analytical tool surface over a configured Rawbbit ClickHouse events table
+- AI agents and MCP clients can use that MCP surface without direct access to the ingestion runtime
+- Metabase can be deployed separately or together with the ClickHouse MCP package
 - [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) is included as a starter downstream layer
 
 The current release is intentionally narrow: it focuses on reliable ingestion, durable raw storage, and a simple first query path.
@@ -137,6 +156,8 @@ The included [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) model is inten
 - [`docs/quickstart.md`](docs/quickstart.md)
 - [`docs/configuration.md`](docs/configuration.md)
 - [`clickhouse/README.md`](clickhouse/README.md)
+- [`clickhouse-mcp/README.md`](clickhouse-mcp/README.md)
+- [`metabase/README.md`](metabase/README.md)
 
 ## License
 

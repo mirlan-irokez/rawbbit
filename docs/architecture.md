@@ -22,6 +22,18 @@ ClickHouse serving path:
 Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> ClickHouse
 ```
 
+ClickHouse MCP and Metabase path:
+
+```text
+Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> ClickHouse -> MCP / Metabase
+```
+
+AI agent access path:
+
+```text
+Raw Parquet -> ClickHouse -> ClickHouse MCP -> AI agents / MCP clients
+```
+
 ## Components
 
 ### Collector API
@@ -83,6 +95,22 @@ In this shape, ClickHouse is not the ingestion source of truth. It is a serving 
 
 See [`../clickhouse/README.md`](../clickhouse/README.md).
 
+### ClickHouse MCP and Metabase layer
+
+The ClickHouse MCP server can be deployed after ClickHouse is populated with Rawbbit events. It exposes read-only tools for event discovery, JSON-key discovery, sampling, guarded SQL, DAU, and funnel checks.
+
+Metabase can be deployed beside the MCP server as a BI interface over the same ClickHouse data.
+
+MCP clients can include AI coding or operations agents such as OpenCode, OpenClaw, or any other client that supports remote HTTP MCP.
+
+This layer is not part of ingestion. It is a downstream access layer:
+
+```text
+Raw Parquet -> ClickHouse -> MCP clients / AI agents / Metabase
+```
+
+See [`../clickhouse-mcp/README.md`](../clickhouse-mcp/README.md).
+
 ## Design choices
 
 ### Raw-first storage boundary
@@ -95,7 +123,7 @@ The collector and raw writer are intentionally separated by a durable message la
 
 ### Portable downstream path
 
-The current repository includes a BigQuery external-table path, a small SQLMesh starter model, and an optional ClickHouse serving path, but the raw storage boundary remains the stable handoff point.
+The current repository includes a BigQuery external-table path, a small SQLMesh starter model, an optional ClickHouse serving path, and a ClickHouse MCP / Metabase access layer, but the raw storage boundary remains the stable handoff point.
 
 ## Delivery semantics
 

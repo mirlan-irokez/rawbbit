@@ -121,3 +121,5 @@ If the flow does not complete, check:
 - `architecture.md`
 - `configuration.md`
 - `../clickhouse/README.md` for the ClickHouse query path
+- `../clickhouse-mcp/README.md` for the ClickHouse MCP and optional Metabase deploy path
+- `../metabase/README.md` for standalone Metabase deployment

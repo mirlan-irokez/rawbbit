@@ -1,0 +1,5 @@
+fastmcp>=3.0.0,<4
+clickhouse-connect==0.10.0
+pydantic==2.12.5
+pydantic-settings==2.13.1
+uvicorn>=0.30.0,<1

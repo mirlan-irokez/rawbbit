@@ -32,3 +32,13 @@ It is intended as the operator path for the current open-source release.
 - `../docs/quickstart.md`
 - `../docs/configuration.md`
 - `../docs/architecture.md`
+
+## Related downstream deployables
+
+The `deploy/` folder is for the ingestion runtime only. It does not start ClickHouse, MCP, or Metabase.
+
+For downstream analytics deployment guides, see:
+
+- `../clickhouse/README.md` for loading/querying Rawbbit data in ClickHouse
+- `../clickhouse-mcp/README.md` for the ClickHouse MCP server and optional Metabase deployment
+- `../metabase/README.md` for standalone Metabase

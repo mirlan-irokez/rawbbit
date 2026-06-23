@@ -360,10 +360,21 @@ Using S3-compatible storage as the ClickHouse table storage disk is a separate o
 - use read-only object-storage credentials for loaders whenever possible
 - do not expose the native or HTTP ports publicly without a deliberate access-control layer
 
+## Next: MCP and Metabase
+
+After ClickHouse has a populated Rawbbit events table, you can expose it through:
+
+- the Rawbbit ClickHouse MCP server for read-only analytical tools
+- Metabase for BI dashboards and exploration
+- both on one VM behind bundled Caddy
+
+See [`../clickhouse-mcp/README.md`](../clickhouse-mcp/README.md).
+
 ## Related Docs
 
 - [`../docs/architecture.md`](../docs/architecture.md)
 - [`../docs/configuration.md`](../docs/configuration.md)
 - [`../docs/quickstart.md`](../docs/quickstart.md)
+- [`../clickhouse-mcp/README.md`](../clickhouse-mcp/README.md)
 - [ClickHouse S3 integration](https://clickhouse.com/docs/integrations/data-ingestion/s3)
 - [ClickHouse MergeTree schema design](https://clickhouse.com/docs/data-modeling/schema-design)

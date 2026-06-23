@@ -1,0 +1,5 @@
+{$MCP_DOMAIN} {
+    encode zstd gzip
+
+    reverse_proxy mcp-server:8000
+}

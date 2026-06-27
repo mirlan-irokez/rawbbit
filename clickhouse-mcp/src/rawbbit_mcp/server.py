@@ -16,6 +16,7 @@ from rawbbit_mcp.clickhouse import (
     JSON_COLUMNS,
     ClickHouseGateway,
     bot_filter_sql,
+    build_funnel_sql,
     checked_limit,
     optional_filters_sql,
     quote_string,
@@ -279,40 +280,16 @@ def calculate_funnel(
     if not 2 <= len(clean_steps) <= 10:
         return [{"error": "steps must contain between 2 and 10 event names"}]
 
-    step_set = ", ".join(quote_string(step) for step in clean_steps)
-    min_columns = ",\n      ".join(
-        f"minIf(event_time, event_name = {quote_string(step)}) AS step_{idx}"
-        for idx, step in enumerate(clean_steps, start=1)
+    sql = build_funnel_sql(
+        settings=settings,
+        steps=clean_steps,
+        start_date=start_date,
+        end_date=end_date,
+        app_id=app_id,
+        environment=environment,
+        window_hours=window_hours,
+        exclude_bots=exclude_bots,
     )
-    counts = []
-    for idx, step in enumerate(clean_steps, start=1):
-        if idx == 1:
-            condition = "step_1 IS NOT NULL"
-        else:
-            previous = " AND ".join(f"step_{i} IS NOT NULL" for i in range(1, idx + 1))
-            ordered = " AND ".join(f"step_{i} >= step_{i - 1}" for i in range(2, idx + 1))
-            within_window = f"step_{idx} <= step_1 + INTERVAL {max(1, window_hours)} HOUR"
-            condition = f"{previous} AND {ordered} AND {within_window}"
-        counts.append(f"countIf({condition}) AS step_{idx}_users")
-
-    sql = f"""
-    WITH per_actor AS
-    (
-      SELECT
-        coalesce(nullIf(user_id, ''), user_pseudo_id) AS actor_id,
-        {min_columns}
-      FROM {settings.table_ref}
-      WHERE event_date BETWEEN toDate({quote_string(start_date)}) AND toDate({quote_string(end_date)})
-        AND event_time IS NOT NULL
-        AND event_name IN ({step_set})
-      {optional_filters_sql(app_id=app_id, environment=environment)}
-      {bot_filter_sql(settings, exclude_bots)}
-      GROUP BY actor_id
-    )
-    SELECT
-      {", ".join(counts)}
-    FROM per_actor
-    """
     return gateway.query_rows(sql)
 
 

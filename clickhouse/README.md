@@ -320,15 +320,19 @@ Example loader environment:
 ```env
 CLICKHOUSE_USER=admin
 CLICKHOUSE_PASSWORD=replace_with_a_strong_password
-CLICKHOUSE_RAW_S3_BASE_URL=https://s3.example.com/your-bucket/raw
 CLICKHOUSE_RAW_S3_ACCESS_KEY=your-access-key
 CLICKHOUSE_RAW_S3_SECRET_KEY=your-secret-key
+CLICKHOUSE_SEAWEED_S3_ENDPOINT=https://s3.example.com
+CLICKHOUSE_RAW_S3_BUCKET=your-bucket
+CLICKHOUSE_RAW_S3_PREFIX=raw
 ```
+
+The loader uses the S3 endpoint, bucket, and prefix as the source of truth for both the ClickHouse `s3()` URL and the `aws s3 ls` preflight. Keep the endpoint as the S3 API host only; do not include the bucket or raw prefix in it.
 
 The loader computes the previous hour and expands the final URL as:
 
 ```text
-${CLICKHOUSE_RAW_S3_BASE_URL}/*/event_date=YYYY-MM-DD/hour=HH/*.parquet
+${CLICKHOUSE_SEAWEED_S3_ENDPOINT}/${CLICKHOUSE_RAW_S3_BUCKET}/${CLICKHOUSE_RAW_S3_PREFIX}/*/event_date=YYYY-MM-DD/hour=HH/*.parquet
 ```
 
 Example Linux cron entry:

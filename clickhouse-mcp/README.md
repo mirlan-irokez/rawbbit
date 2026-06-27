@@ -108,6 +108,7 @@ CLICKHOUSE_SECURE=1
 CLICKHOUSE_VERIFY=1
 
 MCP_API_KEYS_JSON={"user1":"replace-with-long-random-token"}
+MCP_ALLOW_UNAUTHENTICATED=0
 
 POSTGRES_DB=metabase
 POSTGRES_USER=metabase
@@ -212,7 +213,10 @@ For simple self-hosted deployments, use static bearer tokens:
 
 ```env
 MCP_API_KEYS_JSON={"user1":"replace-with-long-random-token","user2":"another-long-random-token"}
+MCP_ALLOW_UNAUTHENTICATED=0
 ```
+
+The server fails startup when no static token or JWT verifier is configured. For local-only development without auth, set `MCP_ALLOW_UNAUTHENTICATED=1`.
 
 Clients send:
 

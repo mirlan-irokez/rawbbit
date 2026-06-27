@@ -22,6 +22,18 @@ def test_settings_use_jwt_mode_without_static_tokens() -> None:
     assert settings.auth_mode == "jwt"
 
 
+def test_settings_fail_closed_without_auth() -> None:
+    with pytest.raises(ValidationError, match="MCP authentication is required"):
+        Settings()
+
+
+def test_settings_allow_explicit_unauthenticated_mode() -> None:
+    settings = Settings(MCP_ALLOW_UNAUTHENTICATED=True)
+
+    assert settings.auth_mode == "none"
+    assert settings.allow_unauthenticated is True
+
+
 @pytest.mark.parametrize(
     "raw_value",
     [

@@ -4,6 +4,7 @@ import json
 from functools import lru_cache
 
 from pydantic import Field, ValidationError, field_validator
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,6 +43,7 @@ class Settings(BaseSettings):
     jwt_jwks_uri: str = Field(default="", alias="MCP_JWT_JWKS_URI")
     jwt_issuer: str = Field(default="", alias="MCP_JWT_ISSUER")
     jwt_audience: str = Field(default="", alias="MCP_JWT_AUDIENCE")
+    allow_unauthenticated: bool = Field(default=False, alias="MCP_ALLOW_UNAUTHENTICATED")
 
     @field_validator("mcp_path")
     @classmethod
@@ -86,6 +88,15 @@ class Settings(BaseSettings):
             seen_tokens.add(normalized)
 
         return value
+
+    @model_validator(mode="after")
+    def validate_auth_is_explicit(self) -> "Settings":
+        if self.auth_mode == "none" and not self.allow_unauthenticated:
+            raise ValueError(
+                "MCP authentication is required. Set MCP_API_KEYS_JSON or JWT settings, "
+                "or explicitly set MCP_ALLOW_UNAUTHENTICATED=1 for local-only development."
+            )
+        return self
 
     @property
     def table_ref(self) -> str:

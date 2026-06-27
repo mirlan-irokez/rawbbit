@@ -74,6 +74,47 @@ def optional_filters_sql(
     return (" AND " + " AND ".join(clauses)) if clauses else ""
 
 
+def build_funnel_sql(
+    *,
+    settings: Settings,
+    steps: list[str],
+    start_date: str,
+    end_date: str,
+    app_id: str | None,
+    environment: str | None,
+    window_hours: int,
+    exclude_bots: bool,
+) -> str:
+    step_set = ", ".join(quote_string(step) for step in steps)
+    step_conditions = ",\n          ".join(f"event_name = {quote_string(step)}" for step in steps)
+    counts = ",\n      ".join(
+        f"countIf(funnel_step >= {idx}) AS step_{idx}_users" for idx, _ in enumerate(steps, start=1)
+    )
+    window_seconds = max(1, window_hours) * 3600
+
+    return f"""
+    WITH per_actor AS
+    (
+      SELECT
+        coalesce(nullIf(user_id, ''), user_pseudo_id) AS actor_id,
+        windowFunnel({window_seconds})(
+          toUnixTimestamp(event_time),
+          {step_conditions}
+        ) AS funnel_step
+      FROM {settings.table_ref}
+      WHERE event_date BETWEEN toDate({quote_string(start_date)}) AND toDate({quote_string(end_date)})
+        AND event_time IS NOT NULL
+        AND event_name IN ({step_set})
+      {optional_filters_sql(app_id=app_id, environment=environment)}
+      {bot_filter_sql(settings, exclude_bots)}
+      GROUP BY actor_id
+    )
+    SELECT
+      {counts}
+    FROM per_actor
+    """
+
+
 class ClickHouseGateway:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings

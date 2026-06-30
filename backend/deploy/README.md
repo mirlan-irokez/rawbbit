@@ -1,6 +1,6 @@
 # Deploy
 
-The `deploy/` folder contains the reference scaffolding for running the public Rawbbit stack in local or simple self-hosted environments.
+The `backend/deploy/` folder contains the reference scaffolding for running the public Rawbbit stack in local or simple self-hosted environments.
 
 ## What is here
 
@@ -11,7 +11,7 @@ The `deploy/` folder contains the reference scaffolding for running the public R
 
 ## What this folder is for
 
-Use `deploy/` when you want to:
+Use `backend/deploy/` when you want to:
 
 - boot the stack locally
 - understand how `collector-api`, `raw-writer`, and NATS are connected
@@ -29,16 +29,16 @@ It is intended as the operator path for the current open-source release.
 
 ## Related docs
 
-- `../docs/quickstart.md`
-- `../docs/configuration.md`
-- `../docs/architecture.md`
+- `../../docs/quickstart.md`
+- `../../docs/configuration.md`
+- `../../docs/architecture.md`
 
 ## Related downstream deployables
 
-The `deploy/` folder is for the ingestion runtime only. It does not start ClickHouse, MCP, or Metabase.
+The `backend/deploy/` folder is for the ingestion runtime only. It does not start ClickHouse, MCP, or Metabase.
 
 For downstream analytics deployment guides, see:
 
-- `../clickhouse/README.md` for loading/querying Rawbbit data in ClickHouse
-- `../clickhouse-mcp/README.md` for the ClickHouse MCP server and optional Metabase deployment
-- `../metabase/README.md` for standalone Metabase
+- `../../clickhouse/README.md` for loading/querying Rawbbit data in ClickHouse
+- `../../clickhouse-mcp/README.md` for the ClickHouse MCP server and optional Metabase deployment
+- `../../metabase/README.md` for standalone Metabase

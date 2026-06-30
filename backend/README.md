@@ -6,6 +6,7 @@ The `backend/` folder contains the executable ingestion-side services in Rawbbit
 
 - `collector-api` — request-facing HTTP ingestion service
 - `raw-writer` — background worker that consumes queued events and writes partitioned Parquet files
+- `deploy` — Docker Compose and environment scaffolding for the backend ingestion runtime
 
 Together these services implement the public runtime boundary:
 
@@ -28,5 +29,6 @@ The backend does not include a full reporting or dashboard layer. Its responsibi
 
 - `collector-api/README.md`
 - `raw-writer/README.md`
+- `deploy/README.md`
 - `../docs/architecture.md`
 - `../docs/configuration.md`

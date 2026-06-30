@@ -4,34 +4,23 @@
 
 Rawbbit is a self-hosted ingestion and raw-storage pipeline for analytics events.
 
-Current runtime boundary:
+Main Rawbbit path:
 
 ```text
-Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet in object storage
+Producer -> Collector API -> NATS JetStream -> Raw Writer
+  -> S3-compatible object storage / SeaweedFS Parquet
+  -> ClickHouse loader cron job
+  -> ClickHouse
+  -> MCP / Metabase / agents / users
 ```
 
-Current downstream query path included in the repository:
+Optional BigQuery path:
 
 ```text
-Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> BigQuery external table -> SQLMesh base model
-```
-
-ClickHouse serving path:
-
-```text
-Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> ClickHouse
-```
-
-ClickHouse MCP and Metabase path:
-
-```text
-Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> ClickHouse -> MCP / Metabase
-```
-
-AI agent access path:
-
-```text
-Raw Parquet -> ClickHouse -> ClickHouse MCP -> AI agents / MCP clients
+Producer -> Collector API -> NATS JetStream -> Raw Writer
+  -> object storage Parquet
+  -> BigQuery external table
+  -> SQLMesh base model
 ```
 
 ## Components
@@ -81,17 +70,11 @@ This layer:
 - separates ingestion concerns from downstream query and modeling concerns
 - makes it possible to change downstream tooling without changing the ingestion contract
 
-### SQLMesh starter project
-
-The repository includes a small [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) project that reads from the raw external-table layer.
-
-It exists as a starter downstream path, not as the center of the runtime architecture.
-
 ### ClickHouse serving layer
 
-ClickHouse can be added as a downstream query layer over raw Parquet.
+ClickHouse is the main analytical database and serving layer over raw Parquet.
 
-In this shape, ClickHouse is not the ingestion source of truth. It is a serving analytical database that can query raw files directly or load them into local `MergeTree` tables for faster analytics.
+In this shape, ClickHouse is not the ingestion source of truth. It is a serving analytical database populated from raw Parquet, usually by the hourly loader into local `MergeTree` tables for faster analytics.
 
 See [`../clickhouse/README.md`](../clickhouse/README.md).
 
@@ -106,10 +89,16 @@ MCP clients can include AI coding or operations agents such as OpenCode, OpenCla
 This layer is not part of ingestion. It is a downstream access layer:
 
 ```text
-Raw Parquet -> ClickHouse -> MCP clients / AI agents / Metabase
+SeaweedFS/S3 Parquet -> ClickHouse loader -> ClickHouse -> MCP clients / AI agents / Metabase
 ```
 
 See [`../clickhouse-mcp/README.md`](../clickhouse-mcp/README.md).
+
+### Optional BigQuery and SQLMesh layer
+
+The repository also includes a BigQuery external-table path and a small [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) project.
+
+This path reads the same raw Parquet contract through BigQuery and can build the starter `staging.base_dataquery__events` model. It is useful when a deployment wants BigQuery, but it is not the center of the OSS Rawbbit architecture.
 
 ## Design choices
 
@@ -121,9 +110,9 @@ Raw Parquet is the durable truth boundary. That keeps the ingestion system simpl
 
 The collector and raw writer are intentionally separated by a durable message layer. This lets the ingress edge stay narrow while the storage side handles batching and retries independently.
 
-### Portable downstream path
+### ClickHouse-first serving with optional warehouses
 
-The current repository includes a BigQuery external-table path, a small SQLMesh starter model, an optional ClickHouse serving path, and a ClickHouse MCP / Metabase access layer, but the raw storage boundary remains the stable handoff point.
+The current repository uses ClickHouse as the main open analytical database path, with MCP, Metabase, agents, and SQL users consuming the ClickHouse-backed table. BigQuery external tables and SQLMesh remain optional downstream integrations over the same raw Parquet contract.
 
 ## Delivery semantics
 

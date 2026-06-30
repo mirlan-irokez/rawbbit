@@ -1,6 +1,6 @@
 # Configuration
 
-The canonical environment-variable reference for the public stack is `deploy/.env.example`.
+The canonical environment-variable reference for the public stack is `backend/deploy/.env.example`.
 
 This guide groups the main settings by responsibility.
 
@@ -84,6 +84,7 @@ S3-compatible mode:
 Notes:
 
 - `RAW_STORAGE_BACKEND` selects the raw landing target
+- `RAW_STORAGE_BACKEND=s3` is the preferred OSS path when using SeaweedFS or another S3-compatible object store
 - `GCS_RAW_BUCKET` is required when `RAW_STORAGE_BACKEND=gcs`
 - `S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY`, and `S3_SECRET_KEY` are required when `RAW_STORAGE_BACKEND=s3`
 - `GCS_RAW_PREFIX` and `S3_PREFIX` default to `raw`
@@ -117,7 +118,7 @@ The raw layer stays intentionally simple and mostly string-typed for compatibili
 
 ## Downstream ClickHouse MCP and Metabase settings
 
-The ingestion runtime uses `deploy/.env.example` as its canonical configuration reference.
+The ingestion runtime uses `backend/deploy/.env.example` as its canonical configuration reference.
 
 The optional ClickHouse MCP and combined Metabase deployment has its own environment file under `clickhouse-mcp/.env.example` in the public repository.
 

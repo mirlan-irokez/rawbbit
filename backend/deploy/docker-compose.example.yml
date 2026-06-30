@@ -15,7 +15,7 @@ services:
   collector-api:
     image: ${IMAGE_LOCATION_ADDRESS}:{version}
     build:
-      context: ../backend/collector-api
+      context: ../collector-api
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -48,7 +48,7 @@ services:
   raw-writer:
     image: ${IMAGE_LOCATION_ADDRESS}:{version}
     build:
-      context: ../backend/raw-writer
+      context: ../raw-writer
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -83,7 +83,7 @@ services:
       S3_USE_SSL: ${S3_USE_SSL:-0}
       S3_VERIFY_SSL: ${S3_VERIFY_SSL:-0}
     # If using GCS outside GCP with a service account JSON key, mount it and set
-    # GOOGLE_APPLICATION_CREDENTIALS to the in-container path in deploy/.env.
+    # GOOGLE_APPLICATION_CREDENTIALS to the in-container path in backend/deploy/.env.
     # Example mount (optional for GCS mode, typically unused for S3 mode):
     volumes:
       - /home/deploy/gcp-sa.json:/var/secrets/gcp/sa.json:ro

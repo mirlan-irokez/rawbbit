@@ -1,6 +1,6 @@
 # ClickHouse
 
-This guide shows how to use ClickHouse as an optional downstream query layer for Rawbbit raw Parquet data.
+This guide shows how to use ClickHouse as the main analytical/query layer for Rawbbit raw Parquet data.
 
 Rawbbit still treats object storage as the durable raw boundary:
 
@@ -8,7 +8,7 @@ Rawbbit still treats object storage as the durable raw boundary:
 Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet in object storage
 ```
 
-ClickHouse is added after that boundary:
+ClickHouse is added after that boundary and becomes the main serving table for analytics:
 
 ```text
 Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> ClickHouse
@@ -16,7 +16,7 @@ Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet -> ClickHou
 
 This is intentionally not a full VM hardening guide. Use your normal server, Docker, backup, TLS, and secret-management practices for production deployments.
 
-## When to Use ClickHouse
+## Why ClickHouse Is the Main Query Path
 
 Use ClickHouse when you want:
 
@@ -314,6 +314,8 @@ A simple first production shape is:
 ```text
 Rawbbit raw Parquet -> hourly loader -> analytics.events
 ```
+
+For the current OSS path, treat this hourly loader as the normal bridge between the portable raw layer and the ClickHouse serving table. The loader can be hardened over time with stronger replay, backfill, and observability controls, but this is the intended main query path.
 
 Example loader environment:
 

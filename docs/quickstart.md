@@ -4,7 +4,8 @@ This quickstart walks through the supported local validation path for the public
 
 Scope note:
 - this quickstart includes both supported raw-storage backends for local validation
-- if you want the documented BigQuery external-table query path afterward, use GCS
+- S3-compatible storage such as SeaweedFS is the preferred OSS raw-storage path
+- if you want the optional BigQuery external-table path afterward, use GCS
 
 ## Prerequisites
 
@@ -22,10 +23,10 @@ You need:
 Copy the example environment file:
 
 ```bash
-cp deploy/.env.example deploy/.env
+cp backend/deploy/.env.example backend/deploy/.env
 ```
 
-Set at least these values:
+For the default GCS mode, set at least these values:
 
 ```text
 COLLECTOR_API_KEYS_JSON={"dev-api-key":"com.example.app"}
@@ -35,7 +36,7 @@ GCS_RAW_BUCKET=your-bucket-name
 GCS_RAW_PREFIX=raw
 ```
 
-For S3-compatible mode instead, set:
+For the preferred OSS S3-compatible mode, set:
 
 ```text
 COLLECTOR_API_KEYS_JSON={"dev-api-key":"com.example.app"}
@@ -60,7 +61,7 @@ For GCS mode, the current Compose setup expects a service-account key inside the
 /var/secrets/gcp/sa.json
 ```
 
-Before starting the stack, update the host-side mount in `deploy/docker-compose.yml` so it points to your real key file.
+Before starting the stack, update the host-side mount in `backend/deploy/docker-compose.yml` so it points to your real key file.
 
 For S3-compatible mode, no Google key is needed.
 Instead, make sure the configured endpoint and bucket are reachable and the `S3_*` values are correct.
@@ -68,7 +69,7 @@ Instead, make sure the configured endpoint and bucket are reachable and the `S3_
 ## 3. Start the stack
 
 ```bash
-docker compose -f deploy/docker-compose.yml up --build
+docker compose -f backend/deploy/docker-compose.yml up --build
 ```
 
 Expected services:
@@ -120,6 +121,6 @@ If the flow does not complete, check:
 
 - `architecture.md`
 - `configuration.md`
-- `../clickhouse/README.md` for the ClickHouse query path
+- `../clickhouse/README.md` for the main ClickHouse query/loading path
 - `../clickhouse-mcp/README.md` for the ClickHouse MCP and optional Metabase deploy path
 - `../metabase/README.md` for standalone Metabase deployment

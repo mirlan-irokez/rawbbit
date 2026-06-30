@@ -1,6 +1,7 @@
 # Quickstart
 
 This quickstart walks through the supported local validation path for the public Rawbbit stack.
+It uses a small game-style event so you can verify the path from a producer request to durable raw telemetry storage.
 
 Scope note:
 - this quickstart includes both supported raw-storage backends for local validation
@@ -29,7 +30,7 @@ cp backend/deploy/.env.example backend/deploy/.env
 For the default GCS mode, set at least these values:
 
 ```text
-COLLECTOR_API_KEYS_JSON={"dev-api-key":"com.example.app"}
+COLLECTOR_API_KEYS_JSON={"dev-api-key":"com.example.mygame"}
 IP_HASH_SALT=replace_me
 RAW_STORAGE_BACKEND=gcs
 GCS_RAW_BUCKET=your-bucket-name
@@ -39,7 +40,7 @@ GCS_RAW_PREFIX=raw
 For the preferred OSS S3-compatible mode, set:
 
 ```text
-COLLECTOR_API_KEYS_JSON={"dev-api-key":"com.example.app"}
+COLLECTOR_API_KEYS_JSON={"dev-api-key":"com.example.mygame"}
 IP_HASH_SALT=replace_me
 RAW_STORAGE_BACKEND=s3
 S3_ENDPOINT_URL=http://seaweedfs:8333
@@ -78,13 +79,13 @@ Expected services:
 - `collector-api`
 - `raw-writer`
 
-## 4. Send a test event
+## 4. Send a test player event
 
 ```bash
 curl -sS -X POST http://localhost:8080/v1/events:batch \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: dev-api-key' \
-  -d '{"events":[{"event_id":"00000000-0000-0000-0000-000000000001","app_id":"com.example.app","environment":"dev","event_name":"test_event","event_timestamp":"2026-03-20T18:42:15.123Z"}]}'
+  -d '{"events":[{"event_id":"00000000-0000-0000-0000-000000000001","app_id":"com.example.mygame","environment":"dev","event_name":"level_completed","event_timestamp":"2026-03-20T18:42:15.123Z","user":{"user_pseudo_id":"player_anon_001","session_id":"session_001"},"event_params":{"level_id":3,"duration_sec":91,"platform":"webgl"}}]}'
 ```
 
 Expected response shape:
@@ -104,7 +105,7 @@ A successful validation means:
 Expected partition layout:
 
 ```text
-raw/app_id=com.example.app/event_date=YYYY-MM-DD/hour=HH/
+raw/app_id=com.example.mygame/event_date=YYYY-MM-DD/hour=HH/
 ```
 
 ## 6. Troubleshooting checks

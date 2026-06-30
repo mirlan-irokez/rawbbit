@@ -2,7 +2,10 @@
 
 ## Overview
 
-Rawbbit is a self-hosted ingestion and raw-storage pipeline for analytics events.
+Rawbbit is a self-hosted telemetry pipeline for mobile and web game events.
+It is designed for teams that want to collect player sessions, gameplay events, funnels, retention signals, economy events, monetization events, and backend service events without handing the raw telemetry layer to a proprietary analytics vendor.
+
+The architecture stays intentionally small: game clients and services send events, Rawbbit lands the durable raw layer, ClickHouse serves analytics, and optional tools such as MCP and Metabase sit on top.
 
 Main Rawbbit path:
 
@@ -27,11 +30,11 @@ Producer -> Collector API -> NATS JetStream -> Raw Writer
 
 ### Collector API
 
-The collector is the request-facing ingress service.
+The collector is the request-facing ingress service for game clients, web builds, mobile apps, and backend game services.
 
 It is responsible for:
 
-- accepting batched events over HTTP
+- accepting batched player and gameplay events over HTTP
 - validating payloads
 - mapping API keys to `app_id`
 - attaching ingest metadata such as request ID and receive time
@@ -66,7 +69,7 @@ The raw Parquet layer is the system-of-record boundary for the current release.
 
 This layer:
 
-- preserves accepted events in a portable format
+- preserves accepted player and game-service events in a portable format
 - separates ingestion concerns from downstream query and modeling concerns
 - makes it possible to change downstream tooling without changing the ingestion contract
 
@@ -74,7 +77,7 @@ This layer:
 
 ClickHouse is the main analytical database and serving layer over raw Parquet.
 
-In this shape, ClickHouse is not the ingestion source of truth. It is a serving analytical database populated from raw Parquet, usually by the hourly loader into local `MergeTree` tables for faster analytics.
+In this shape, ClickHouse is not the ingestion source of truth. It is a serving analytical database populated from raw Parquet, usually by the hourly loader into local `MergeTree` tables for faster analytics over level funnels, session activity, retention checks, economy events, and other telemetry queries.
 
 See [`../clickhouse/README.md`](../clickhouse/README.md).
 
@@ -82,7 +85,7 @@ See [`../clickhouse/README.md`](../clickhouse/README.md).
 
 The ClickHouse MCP server can be deployed after ClickHouse is populated with Rawbbit events. It exposes read-only tools for event discovery, JSON-key discovery, sampling, guarded SQL, DAU, and funnel checks.
 
-Metabase can be deployed beside the MCP server as a BI interface over the same ClickHouse data.
+Metabase can be deployed beside the MCP server as a BI interface over the same ClickHouse data for player and gameplay analysis.
 
 MCP clients can include AI coding or operations agents such as OpenCode, OpenClaw, or any other client that supports remote HTTP MCP.
 
@@ -104,11 +107,11 @@ This path reads the same raw Parquet contract through BigQuery and can build the
 
 ### Raw-first storage boundary
 
-Raw Parquet is the durable truth boundary. That keeps the ingestion system simple and avoids coupling the request path to any single warehouse-specific serving model.
+Raw Parquet is the durable truth boundary. That keeps the ingestion system simple and avoids coupling game telemetry collection to any single warehouse-specific serving model.
 
 ### Queue-separated ingestion
 
-The collector and raw writer are intentionally separated by a durable message layer. This lets the ingress edge stay narrow while the storage side handles batching and retries independently.
+The collector and raw writer are intentionally separated by a durable message layer. This lets the player-facing ingress edge stay narrow while the storage side handles batching and retries independently.
 
 ### ClickHouse-first serving with optional warehouses
 
@@ -122,4 +125,4 @@ That means:
 
 - duplicate events are possible
 - the collector reduces duplicate inserts within the JetStream dedupe window using `(app_id, event_id)`
-- downstream consumers should still treat `event_id` as the stable event identity key
+- downstream consumers should still treat `event_id` as the stable event identity key for player and gameplay events

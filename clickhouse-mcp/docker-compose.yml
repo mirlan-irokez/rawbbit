@@ -1,8 +1,6 @@
 services:
   mcp-server:
-    image: ${MCP_SERVER_IMAGE:-rawbbit-clickhouse-mcp:local}
-    build:
-      context: .
+    image: ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2
     container_name: rawbbit-clickhouse-mcp
     restart: unless-stopped
     environment:

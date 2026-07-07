@@ -27,6 +27,25 @@ Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet in object s
 
 It is intended as the operator path for the current open-source release.
 
+## Public images
+
+The ingestion services are published as public GHCR images:
+
+- `collector-api` -> `ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.7`
+- `raw-writer` -> `ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.8`
+- `nats` -> upstream `nats:2.10-alpine`
+
+Use pinned image tags for deployments. The `latest` tags exist for convenience, but they make rollbacks and incident analysis needlessly vague.
+
+`docker-compose.example.yml` is image-pull oriented by default and points at the pinned GHCR images.
+
+The Compose files can still be used in two modes:
+
+- source-build mode: keep `build:` entries and run with `--build`
+- image-pull mode: point `image:` to the GHCR tags and run with `--no-build`
+
+Runtime configuration still comes from `.env` or secret management. Do not bake API keys, object-storage credentials, salts, or service-account JSON files into images.
+
 ## Related docs
 
 - `../../docs/quickstart.md`

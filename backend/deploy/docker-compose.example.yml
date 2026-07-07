@@ -13,9 +13,7 @@ services:
       - nats-data:/data
 
   collector-api:
-    image: ${IMAGE_LOCATION_ADDRESS}:{version}
-    build:
-      context: ../collector-api
+    image: ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.7
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -46,9 +44,7 @@ services:
       - nats
 
   raw-writer:
-    image: ${IMAGE_LOCATION_ADDRESS}:{version}
-    build:
-      context: ../raw-writer
+    image: ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.8
     restart: unless-stopped
     logging:
       driver: "json-file"

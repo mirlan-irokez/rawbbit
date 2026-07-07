@@ -69,6 +69,8 @@ Instead, make sure the configured endpoint and bucket are reachable and the `S3_
 
 ## 3. Start the stack
 
+For local validation from a source checkout, build the services with Compose:
+
 ```bash
 docker compose -f backend/deploy/docker-compose.yml up --build
 ```
@@ -78,6 +80,23 @@ Expected services:
 - `nats`
 - `collector-api`
 - `raw-writer`
+
+For a deployment that should consume the public OSS images instead of rebuilding locally, set the Compose service images to pinned GHCR tags:
+
+```text
+ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.7
+ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.8
+```
+
+Then start without `--build`:
+
+```bash
+docker compose -f backend/deploy/docker-compose.yml up -d --no-build
+```
+
+The `latest` tags are available, but pinned versions are preferred for repeatable deployments.
+
+Environment and secret handling is the same for both modes. API keys, object-storage credentials, salts, and service-account paths come from `backend/deploy/.env` or your secret manager, not from the images.
 
 ## 4. Send a test player event
 

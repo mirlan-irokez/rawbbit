@@ -40,6 +40,7 @@ Storage note:
 - [What is included](#what-is-included)
 - [Architecture](#architecture)
 - [Quickstart](#quickstart)
+- [Published images](#published-images)
 - [Configuration](#configuration)
 - [Repository layout](#repository-layout)
 - [Project status](#project-status)
@@ -85,6 +86,23 @@ The shortest path to a working local setup is:
 5. verify that Parquet files land in object storage
 
 For the full walkthrough, see [`docs/quickstart.md`](docs/quickstart.md).
+
+## Published images
+
+Rawbbit publishes public service images to GHCR:
+
+- `ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.7`
+- `ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.8`
+- `ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2`
+
+The same images also have `latest` tags for convenience. Prefer pinned version tags for deployments.
+
+You can run the stack in two ways:
+
+- build from source with Docker Compose while developing or validating local changes
+- pull the public GHCR images for repeatable OSS deployments
+
+Secrets are not baked into these images. Provide API keys, storage credentials, ClickHouse passwords, and MCP bearer tokens through private `.env` files or secret management.
 
 ## Configuration
 

@@ -82,6 +82,18 @@ The MCP server currently exposes:
 
 The tools are intentionally raw-table oriented. They are useful for exploration and first analytical workflows, not a full semantic layer.
 
+## Published image
+
+The MCP server is published as a public GHCR image:
+
+```text
+ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2
+```
+
+The image also has a `latest` tag for convenience. Use the pinned version tag for deployments.
+
+The included `docker-compose.yml` points at the pinned GHCR image by default.
+
 ## 1. Prepare Environment
 
 From the public repository root:
@@ -140,7 +152,8 @@ Do not publish ClickHouse, PostgreSQL, or Metabase container ports directly to t
 Use this when you only need agent or MCP-client access to ClickHouse-backed Rawbbit analytics.
 
 ```bash
-docker compose up -d --build mcp-server caddy-mcp
+docker compose pull mcp-server
+docker compose up -d mcp-server caddy-mcp
 docker compose logs -f mcp-server caddy-mcp
 ```
 
@@ -172,7 +185,8 @@ Metabase connects to ClickHouse from the Metabase admin UI after startup. The ap
 Use the shared Caddy service when both public hostnames should live on the same VM.
 
 ```bash
-docker compose --profile ingress-shared up -d --build mcp-server postgres metabase caddy-shared
+docker compose pull mcp-server
+docker compose --profile ingress-shared up -d mcp-server postgres metabase caddy-shared
 docker compose logs -f mcp-server postgres metabase caddy-shared
 ```
 
@@ -196,7 +210,8 @@ If the VM already has a host-level Caddy or another reverse proxy, do not start 
 Start only the application services:
 
 ```bash
-docker compose up -d --build mcp-server
+docker compose pull mcp-server
+docker compose up -d mcp-server
 docker compose up -d postgres metabase
 ```
 

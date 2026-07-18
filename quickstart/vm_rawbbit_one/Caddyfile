@@ -1,0 +1,7 @@
+{$COLLECTOR_PUBLIC_HOSTNAME} {
+	reverse_proxy collector-api:8080
+}
+
+{$S3_PUBLIC_HOSTNAME} {
+	reverse_proxy seaweed-s3:8333
+}

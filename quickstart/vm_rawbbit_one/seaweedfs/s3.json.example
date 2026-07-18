@@ -1,0 +1,47 @@
+{
+  "identities": [
+    {
+      "name": "rawbbit-writer",
+      "credentials": [
+        {
+          "accessKey": "change_me_access_key",
+          "secretKey": "change_me_secret_key"
+        }
+      ],
+      "actions": [
+        "Read",
+        "List",
+        "Write"
+      ]
+    },
+    {
+      "name": "rawbbit-reader",
+      "credentials": [
+        {
+          "accessKey": "change_me_reader_access_key",
+          "secretKey": "change_me_reader_secret_key"
+        }
+      ],
+      "actions": [
+        "Read",
+        "List"
+      ]
+    },
+    {
+      "name": "rawbbit-admin",
+      "credentials": [
+        {
+          "accessKey": "change_me_admin_access_key",
+          "secretKey": "change_me_admin_secret_key"
+        }
+      ],
+      "actions": [
+        "Admin",
+        "Read",
+        "List",
+        "Tagging",
+        "Write"
+      ]
+    }
+  ]
+}

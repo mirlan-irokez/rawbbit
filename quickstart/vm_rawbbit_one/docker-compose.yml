@@ -1,0 +1,125 @@
+name: rawbbit-one
+
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-env-files: &env-files
+  - path: .env
+    required: true
+
+x-seaweedfs-image: &seaweedfs-image chrislusf/seaweedfs:4.39
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      COLLECTOR_PUBLIC_HOSTNAME: ${COLLECTOR_PUBLIC_HOSTNAME:-collector.example.com}
+      S3_PUBLIC_HOSTNAME: ${S3_PUBLIC_HOSTNAME:-s3.example.com}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/rawbbit-one/caddy/data:/data
+      - /srv/rawbbit-one/caddy/config:/config
+    depends_on:
+      - collector-api
+      - seaweed-s3
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-c", "/etc/nats/nats-server.conf", "-m", "8222"]
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - /srv/rawbbit-one/nats/jetstream:/data/jetstream
+      - ./nats-server.conf:/etc/nats/nats-server.conf:ro
+
+  collector-api:
+    image: ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.7
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: *env-files
+    volumes:
+      - ./geoip:/var/lib/geoip:ro
+    depends_on:
+      - nats
+
+  raw-writer:
+    image: ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.8
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: *env-files
+    depends_on:
+      - nats
+      - seaweed-s3
+
+  seaweed-master:
+    image: *seaweedfs-image
+    command: >
+      master
+      -ip=seaweed-master
+      -ip.bind=0.0.0.0
+      -port=9333
+      -mdir=/data/seaweedfs/master
+      -volumeSizeLimitMB=${SEAWEED_VOLUME_SIZE_LIMIT_MB:-5000}
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - /srv/rawbbit-one/seaweedfs/master:/data/seaweedfs/master
+
+  seaweed-volume:
+    image: *seaweedfs-image
+    command: >
+      volume
+      -master=seaweed-master:9333
+      -ip=seaweed-volume
+      -ip.bind=0.0.0.0
+      -port=8080
+      -dir=/data/seaweedfs/volume
+      -max=${SEAWEED_VOLUME_MAX:-0}
+      -minFreeSpace=${SEAWEED_VOLUME_MIN_FREE_SPACE_GB:-5}
+      -preStopSeconds=1
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - /srv/rawbbit-one/seaweedfs/volume:/data/seaweedfs/volume
+    depends_on:
+      - seaweed-master
+
+  seaweed-filer:
+    image: *seaweedfs-image
+    command: >
+      filer
+      -master=seaweed-master:9333
+      -ip=seaweed-filer
+      -ip.bind=0.0.0.0
+      -port=8888
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - /srv/rawbbit-one/seaweedfs/filerldb2:/data/seaweedfs/filerldb2
+      - ./seaweedfs/filer.toml:/etc/seaweedfs/filer.toml:ro
+    depends_on:
+      - seaweed-master
+      - seaweed-volume
+
+  seaweed-s3:
+    image: *seaweedfs-image
+    command: >
+      s3
+      -filer=seaweed-filer:8888
+      -ip.bind=0.0.0.0
+      -port=8333
+      -config=/etc/seaweedfs/s3.json
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    depends_on:
+      - seaweed-filer

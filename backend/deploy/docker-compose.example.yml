@@ -2,7 +2,7 @@
 services:
   nats:
     image: nats:2.10-alpine
-    command: ["-js", "-sd", "/data", "-m", "8222"]
+    command: ["-c", "/etc/nats/nats-server.conf", "-m", "8222"]
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -10,7 +10,8 @@ services:
         max-size: "10m"
         max-file: "3"
     volumes:
-      - nats-data:/data
+      - nats-data:/data/jetstream
+      - ./nats-server.conf:/etc/nats/nats-server.conf:ro
 
   collector-api:
     image: ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.7

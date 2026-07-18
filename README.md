@@ -77,6 +77,14 @@ For the deeper architecture note, see [`docs/architecture.md`](docs/architecture
 
 ## Quickstart
 
+For the recommended provider-neutral one-VM deployment guide, see
+[`quickstart/vm_rawbbit_one/README.md`](quickstart/vm_rawbbit_one/README.md).
+It deploys Caddy, NATS JetStream, collector-api, raw-writer, and SeaweedFS with
+persistent host storage. ClickHouse, MCP, and Metabase are separate deployment
+surfaces and are not started by this quickstart.
+
+For local validation and development, keep using [`docs/quickstart.md`](docs/quickstart.md).
+
 The shortest path to a working local setup is:
 
 1. copy `backend/deploy/.env.example` to `backend/deploy/.env`
@@ -85,7 +93,7 @@ The shortest path to a working local setup is:
 4. send a test player event to `POST /v1/events:batch`
 5. verify that Parquet files land in object storage
 
-For the full walkthrough, see [`docs/quickstart.md`](docs/quickstart.md).
+For the full local walkthrough, see [`docs/quickstart.md`](docs/quickstart.md).
 
 ## Published images
 
@@ -128,6 +136,7 @@ sqlmesh_project/   Optional BigQuery SQLMesh starter model
 clickhouse/        Main ClickHouse query/loading path
 clickhouse-mcp/    ClickHouse MCP and optional Metabase deploy path
 metabase/          Metabase OSS ver. deploy instructions
+quickstart/        One-VM deployment guide
 docs/              OSS documentation
 ```
 
@@ -163,6 +172,7 @@ The included [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) model is inten
 ## Documentation
 
 - [`docs/architecture.md`](docs/architecture.md)
+- [`quickstart/vm_rawbbit_one/README.md`](quickstart/vm_rawbbit_one/README.md)
 - [`docs/quickstart.md`](docs/quickstart.md)
 - [`docs/configuration.md`](docs/configuration.md)
 - [`clickhouse/README.md`](clickhouse/README.md)

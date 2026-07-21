@@ -1,0 +1,7 @@
+<clickhouse>
+    <max_server_memory_usage>48000000000</max_server_memory_usage>
+    <max_server_memory_usage_to_ram_ratio>0.75</max_server_memory_usage_to_ram_ratio>
+    <mark_cache_size>4294967296</mark_cache_size>
+    <uncompressed_cache_size>1073741824</uncompressed_cache_size>
+    <listen_host>0.0.0.0</listen_host>
+</clickhouse>

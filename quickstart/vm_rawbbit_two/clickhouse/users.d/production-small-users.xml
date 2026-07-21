@@ -1,0 +1,16 @@
+<clickhouse>
+    <profiles>
+        <default>
+            <max_memory_usage>10000000000</max_memory_usage>
+            <max_memory_usage_for_user>16000000000</max_memory_usage_for_user>
+            <max_threads>6</max_threads>
+            <max_insert_threads>2</max_insert_threads>
+            <max_final_threads>4</max_final_threads>
+            <max_execution_time>300</max_execution_time>
+            <max_bytes_before_external_group_by>4000000000</max_bytes_before_external_group_by>
+            <max_bytes_before_external_sort>4000000000</max_bytes_before_external_sort>
+            <max_temporary_data_on_disk_size_for_query>50000000000</max_temporary_data_on_disk_size_for_query>
+            <max_temporary_data_on_disk_size_for_user>100000000000</max_temporary_data_on_disk_size_for_user>
+        </default>
+    </profiles>
+</clickhouse>

@@ -1,0 +1,161 @@
+name: rawbbit-two
+
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      MCP_PUBLIC_HOSTNAME: ${MCP_PUBLIC_HOSTNAME:?MCP_PUBLIC_HOSTNAME is required}
+      METABASE_PUBLIC_HOSTNAME: ${METABASE_PUBLIC_HOSTNAME:?METABASE_PUBLIC_HOSTNAME is required}
+      CLICKHOUSE_PUBLIC_HOSTNAME: ${CLICKHOUSE_PUBLIC_HOSTNAME:?CLICKHOUSE_PUBLIC_HOSTNAME is required}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/rawbbit-two/caddy/data:/data
+      - /srv/rawbbit-two/caddy/config:/config
+    depends_on:
+      - mcp-server
+      - metabase
+      - clickhouse
+    networks:
+      - web
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_ADMIN_USER:?CLICKHOUSE_ADMIN_USER is required}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_ADMIN_PASSWORD:?CLICKHOUSE_ADMIN_PASSWORD is required}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DATABASE:?CLICKHOUSE_DATABASE is required}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: ${CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT:-1}
+      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:?CLICKHOUSE_DATABASE is required}
+      CLICKHOUSE_TABLE: ${CLICKHOUSE_TABLE:?CLICKHOUSE_TABLE is required}
+      CLICKHOUSE_MCP_USER: ${CLICKHOUSE_MCP_USER:?CLICKHOUSE_MCP_USER is required}
+      CLICKHOUSE_MCP_PASSWORD: ${CLICKHOUSE_MCP_PASSWORD:?CLICKHOUSE_MCP_PASSWORD is required}
+      CLICKHOUSE_METABASE_USER: ${CLICKHOUSE_METABASE_USER:?CLICKHOUSE_METABASE_USER is required}
+      CLICKHOUSE_METABASE_PASSWORD: ${CLICKHOUSE_METABASE_PASSWORD:?CLICKHOUSE_METABASE_PASSWORD is required}
+      CLICKHOUSE_LOADER_USER: ${CLICKHOUSE_LOADER_USER:?CLICKHOUSE_LOADER_USER is required}
+      CLICKHOUSE_LOADER_PASSWORD: ${CLICKHOUSE_LOADER_PASSWORD:?CLICKHOUSE_LOADER_PASSWORD is required}
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    ports:
+      - "127.0.0.1:${CLICKHOUSE_HTTP_BIND_HOST_PORT:-8123}:8123"
+      - "127.0.0.1:${CLICKHOUSE_NATIVE_BIND_HOST_PORT:-9000}:9000"
+    volumes:
+      - /srv/rawbbit-two/clickhouse/data:/var/lib/clickhouse
+      - /srv/rawbbit-two/clickhouse/logs:/var/log/clickhouse-server
+      - ./clickhouse/config.d/${CLICKHOUSE_CONFIG_PROFILE_FILE:-low-memory.xml}:/etc/clickhouse-server/config.d/resource-profile.xml:ro
+      - ./clickhouse/users.d/${CLICKHOUSE_USERS_PROFILE_FILE:-low-memory-users.xml}:/etc/clickhouse-server/users.d/resource-profile-users.xml:ro
+      - ./clickhouse/schema_analytics_events.sql:/docker-entrypoint-initdb.d/01_schema_analytics_events.sql:ro
+      - ./clickhouse/initdb.d/02_service_users.sh:/docker-entrypoint-initdb.d/02_service_users.sh:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - web
+
+  mcp-server:
+    image: ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8000
+      MCP_PATH: ${MCP_PATH:-/mcp}
+      MCP_MAX_QUERY_ROWS: ${MCP_MAX_QUERY_ROWS:-500}
+      MCP_MAX_SAMPLE_ROWS: ${MCP_MAX_SAMPLE_ROWS:-50}
+      MCP_MAX_EXECUTION_SECONDS: ${MCP_MAX_EXECUTION_SECONDS:-30}
+      MCP_BOT_USER_AGENT_REGEX: ${MCP_BOT_USER_AGENT_REGEX:-bot|spider|crawler|headless|bytespider|ahrefs|googlebot}
+      MCP_API_KEYS_JSON: ${MCP_API_KEYS_JSON:-}
+      MCP_ALLOW_UNAUTHENTICATED: ${MCP_ALLOW_UNAUTHENTICATED:-0}
+      MCP_JWT_PUBLIC_KEY: ${MCP_JWT_PUBLIC_KEY:-}
+      MCP_JWT_JWKS_URI: ${MCP_JWT_JWKS_URI:-}
+      MCP_JWT_ISSUER: ${MCP_JWT_ISSUER:-}
+      MCP_JWT_AUDIENCE: ${MCP_JWT_AUDIENCE:-}
+      CLICKHOUSE_HOST: ${CLICKHOUSE_HOST:-clickhouse}
+      CLICKHOUSE_PORT: ${CLICKHOUSE_PORT:-8123}
+      CLICKHOUSE_USER: ${CLICKHOUSE_MCP_USER:?CLICKHOUSE_MCP_USER is required}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_MCP_PASSWORD:?CLICKHOUSE_MCP_PASSWORD is required}
+      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-analytics}
+      CLICKHOUSE_TABLE: ${CLICKHOUSE_TABLE:-events}
+      CLICKHOUSE_SECURE: ${CLICKHOUSE_SECURE:-0}
+      CLICKHOUSE_VERIFY: ${CLICKHOUSE_VERIFY:-1}
+    ports:
+      - "127.0.0.1:${MCP_BIND_HOST_PORT:-8000}:8000"
+    expose:
+      - "8000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - web
+    security_opt:
+      - no-new-privileges:true
+
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:?POSTGRES_SUPERUSER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?POSTGRES_SUPERUSER_PASSWORD is required}
+      METABASE_DB_NAME: ${METABASE_DB_NAME:?METABASE_DB_NAME is required}
+      METABASE_DB_USER: ${METABASE_DB_USER:?METABASE_DB_USER is required}
+      METABASE_DB_PASSWORD: ${METABASE_DB_PASSWORD:?METABASE_DB_PASSWORD is required}
+    volumes:
+      - /srv/rawbbit-two/postgres:/var/lib/postgresql
+      - ./postgres/initdb.d:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${METABASE_DB_USER}\" -d \"$${METABASE_DB_NAME}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+    security_opt:
+      - no-new-privileges:true
+
+  metabase:
+    image: metabase/metabase:v0.61.4.6
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: ${METABASE_DB_NAME:?METABASE_DB_NAME is required}
+      MB_DB_PORT: 5432
+      MB_DB_HOST: postgres
+      MB_DB_USER: ${METABASE_DB_USER:?METABASE_DB_USER is required}
+      MB_DB_PASS: ${METABASE_DB_PASSWORD:?METABASE_DB_PASSWORD is required}
+      JAVA_TIMEZONE: ${METABASE_TIMEZONE:-UTC}
+      MB_SITE_URL: https://${METABASE_PUBLIC_HOSTNAME}
+    ports:
+      - "127.0.0.1:${METABASE_BIND_HOST_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+      - web
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  internal:
+    internal: true
+  web:

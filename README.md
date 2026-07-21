@@ -35,6 +35,17 @@ Storage note:
 - GCS remains supported
 - the BigQuery external-table path remains a supported optional downstream path, not the main architecture
 
+Production-oriented OSS deployment is split into two provider-neutral VM
+guides:
+
+- VM one runs ingestion and raw object storage: Caddy, NATS JetStream,
+  collector-api, raw-writer, and SeaweedFS
+- VM two runs analytics and access surfaces: ClickHouse, the Rawbbit MCP
+  server, Metabase, and Postgres for Metabase state
+
+The boundary between the VMs is the raw Parquet layer in S3-compatible object
+storage.
+
 ## Table of contents
 
 - [What is included](#what-is-included)
@@ -77,11 +88,16 @@ For the deeper architecture note, see [`docs/architecture.md`](docs/architecture
 
 ## Quickstart
 
-For the recommended provider-neutral one-VM deployment guide, see
+For the recommended provider-neutral ingestion VM deployment guide, see
 [`quickstart/vm_rawbbit_one/README.md`](quickstart/vm_rawbbit_one/README.md).
 It deploys Caddy, NATS JetStream, collector-api, raw-writer, and SeaweedFS with
-persistent host storage. ClickHouse, MCP, and Metabase are separate deployment
-surfaces and are not started by this quickstart.
+persistent host storage.
+
+For the matching analytics VM deployment guide, see
+[`quickstart/vm_rawbbit_two/README.md`](quickstart/vm_rawbbit_two/README.md).
+It deploys ClickHouse, the Rawbbit MCP server, Metabase, and Postgres for
+Metabase state. It reads Parquet from the VM-one S3-compatible endpoint and
+loads it into ClickHouse.
 
 For local validation and development, keep using [`docs/quickstart.md`](docs/quickstart.md).
 
@@ -136,7 +152,7 @@ sqlmesh_project/   Optional BigQuery SQLMesh starter model
 clickhouse/        Main ClickHouse query/loading path
 clickhouse-mcp/    ClickHouse MCP and optional Metabase deploy path
 metabase/          Metabase OSS ver. deploy instructions
-quickstart/        One-VM deployment guide
+quickstart/        Provider-neutral VM deployment guides
 docs/              OSS documentation
 ```
 
@@ -173,6 +189,7 @@ The included [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) model is inten
 
 - [`docs/architecture.md`](docs/architecture.md)
 - [`quickstart/vm_rawbbit_one/README.md`](quickstart/vm_rawbbit_one/README.md)
+- [`quickstart/vm_rawbbit_two/README.md`](quickstart/vm_rawbbit_two/README.md)
 - [`docs/quickstart.md`](docs/quickstart.md)
 - [`docs/configuration.md`](docs/configuration.md)
 - [`clickhouse/README.md`](clickhouse/README.md)

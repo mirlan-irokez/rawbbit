@@ -11,7 +11,7 @@ Rawbbit raw layer -> ClickHouse / query layer -> Metabase
 ```
 This guide covers a simple production-minded single-VM deployment of Metabase OSS with PostgreSQL and Caddy.
 
-If you want to deploy Metabase together with the Rawbbit ClickHouse MCP server on the same VM, use [`../clickhouse-mcp/README.md`](../clickhouse-mcp/README.md) instead. This standalone guide remains useful when Metabase has its own VM or deployment package.
+If you want to deploy Metabase together with the Rawbbit MCP server on the same VM, use [`../mcp-server/README.md`](../mcp-server/README.md) instead. This standalone guide remains useful when Metabase has its own VM or deployment package.
 
 ## 1) VM setup
 

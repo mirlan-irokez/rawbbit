@@ -1,7 +1,7 @@
 services:
   mcp-server:
     image: ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2
-    container_name: rawbbit-clickhouse-mcp
+    container_name: rawbbit-mcp-server
     restart: unless-stopped
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -84,7 +84,7 @@ services:
 
   caddy-mcp:
     image: caddy:2
-    container_name: rawbbit-clickhouse-mcp-caddy
+    container_name: rawbbit-mcp-server-caddy
     restart: unless-stopped
     depends_on:
       - mcp-server

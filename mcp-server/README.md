@@ -1,6 +1,6 @@
-# ClickHouse MCP and Metabase
+# Rawbbit MCP server and Metabase
 
-This guide shows how to deploy the Rawbbit ClickHouse MCP server, optional Metabase, or both on one VM.
+This guide shows how to deploy the Rawbbit MCP server, optional Metabase, or both on one VM.
 
 The MCP server is a read-only analytical surface over a ClickHouse table that already contains Rawbbit events. It is not part of the ingestion path, and it does not replace the raw Parquet layer.
 
@@ -20,7 +20,7 @@ Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet in object s
 
 ## What This Deploys
 
-The `clickhouse-mcp/` package provides:
+The `mcp-server/` package provides:
 
 - a FastMCP server for querying a configured ClickHouse Rawbbit events table
 - read-only MCP tools for event discovery, sampling, guarded SQL, DAU, and funnel checks
@@ -28,7 +28,7 @@ The `clickhouse-mcp/` package provides:
 - Caddy ingress variants for MCP-only, Metabase-only, or shared MCP + Metabase HTTPS
 - environment examples for ClickHouse, MCP auth, Metabase, and public hostnames
 
-The separate `metabase/` guide remains useful for a standalone Metabase deployment. Use this guide when you want Metabase and the Rawbbit ClickHouse MCP server managed from the same deployment package.
+The separate `metabase/` guide remains useful for a standalone Metabase deployment. Use this guide when you want Metabase and the Rawbbit MCP server managed from the same deployment package.
 
 ## Prerequisites
 
@@ -99,7 +99,7 @@ The included `docker-compose.yml` points at the pinned GHCR image by default.
 From the public repository root:
 
 ```bash
-cd clickhouse-mcp
+cd mcp-server
 cp .env.example .env
 ```
 
@@ -264,6 +264,18 @@ https://mcp.example.com/mcp
 
 The token in client configuration must match one of the values in `MCP_API_KEYS_JSON`.
 
+### Codex example
+
+Add a remote MCP server entry to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.rawbbit-demo]
+url = "https://mcp.example.com/mcp"
+http_headers = { Authorization = "Bearer MCP_AUTH_TOKEN" }
+```
+
+Replace `MCP_AUTH_TOKEN` with the bearer token issued for the deployed MCP server.
+
 ### OpenCode example
 
 Add a remote MCP server entry to `opencode.jsonc`:
@@ -276,18 +288,18 @@ Add a remote MCP server entry to `opencode.jsonc`:
       "url": "https://mcp.example.com/mcp",
       "enabled": true,
       "headers": {
-        "Authorization": "Bearer <MCP token>"
+        "Authorization": "Bearer {file:~/.secrets/rawbbit-mcp-token}"
       }
     }
   }
 }
 ```
 
-If your OpenCode remote transport expects the server base URL instead of the MCP path, use `https://mcp.example.com`.
+Store the token in `~/.secrets/rawbbit-mcp-token`.
 
 ### OpenClaw example
 
-Add a streamable HTTP MCP server entry to `openclaw.json`:
+Add a streamable HTTP MCP server entry to your OpenClaw workspace `openclaw.json` file:
 
 ```json
 {
@@ -297,7 +309,7 @@ Add a streamable HTTP MCP server entry to `openclaw.json`:
         "url": "https://mcp.example.com/mcp",
         "transport": "streamable-http",
         "headers": {
-          "Authorization": "Bearer <MCP token>"
+          "Authorization": "Bearer MCP_AUTH_TOKEN"
         }
       }
     }
@@ -305,6 +317,7 @@ Add a streamable HTTP MCP server entry to `openclaw.json`:
 }
 ```
 
+Replace `MCP_AUTH_TOKEN` with the bearer token issued for the deployed MCP server.
 Do not commit real bearer tokens in client configuration. Use local secret files, environment variables, or machine-private config where your client supports them.
 
 ## ClickHouse Connection Notes

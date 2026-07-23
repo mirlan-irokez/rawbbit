@@ -66,8 +66,8 @@ This repository contains the public game-telemetry ingestion-to-analytics path:
 - `backend/raw-writer` — JetStream consumer that writes partitioned Parquet files
 - `backend/deploy/` — Docker Compose and environment scaffolding for local or simple self-hosted setups
 - `clickhouse/` — main analytical/query path for loading and querying raw game telemetry in ClickHouse
-- `clickhouse-mcp/` — ClickHouse-backed MCP server and combined MCP + Metabase deployment guide
-- AI agents and MCP clients such as OpenCode or OpenClaw can connect to the ClickHouse MCP endpoint for read-only analytics exploration
+- `mcp-server/` — Rawbbit MCP server, MCP client setup, and combined MCP + Metabase deployment guide
+- AI agents and MCP clients such as Codex, OpenCode, and OpenClaw can connect to the Rawbbit MCP server endpoint for read-only analytics exploration
 - `metabase/` — optional standalone Metabase deployment guide
 - `sqlmesh_project/` — optional [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) project for the BigQuery external-table path
 
@@ -150,7 +150,7 @@ backend/
   deploy/          Local and self-hosted runtime scaffolding
 sqlmesh_project/   Optional BigQuery SQLMesh starter model
 clickhouse/        Main ClickHouse query/loading path
-clickhouse-mcp/    ClickHouse MCP and optional Metabase deploy path
+mcp-server/        Rawbbit MCP server and optional Metabase deploy path
 metabase/          Metabase OSS ver. deploy instructions
 quickstart/        Provider-neutral VM deployment guides
 docs/              OSS documentation
@@ -163,7 +163,7 @@ Component reference notes:
 - [`backend/raw-writer/README.md`](backend/raw-writer/README.md)
 - [`backend/deploy` runtime notes](backend/deploy/README.md)
 - [`clickhouse/README.md`](clickhouse/README.md)
-- [`clickhouse-mcp/README.md`](clickhouse-mcp/README.md)
+- [`mcp-server/README.md`](mcp-server/README.md)
 - [`metabase/README.md`](metabase/README.md)
 
 ## Project status
@@ -175,9 +175,9 @@ Current maturity:
 - raw storage backend selection is implemented for both GCS and S3-compatible targets
 - SeaweedFS/S3-compatible storage is the preferred OSS raw-storage path
 - ClickHouse loading from raw Parquet is the main analytical/query path for player telemetry
-- ClickHouse MCP can expose a read-only analytical tool surface over a configured Rawbbit ClickHouse events table
+- Rawbbit MCP server can expose a read-only analytical tool surface over a configured Rawbbit ClickHouse events table
 - AI agents and MCP clients can use that MCP surface without direct access to the ingestion runtime
-- Metabase can be deployed separately or together with the ClickHouse MCP package
+- Metabase can be deployed separately or together with the Rawbbit MCP server package
 - BigQuery external-table querying is supported as an optional path
 - [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) is included as an optional starter layer for the BigQuery path
 
@@ -193,7 +193,7 @@ The included [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) model is inten
 - [`docs/quickstart.md`](docs/quickstart.md)
 - [`docs/configuration.md`](docs/configuration.md)
 - [`clickhouse/README.md`](clickhouse/README.md)
-- [`clickhouse-mcp/README.md`](clickhouse-mcp/README.md)
+- [`mcp-server/README.md`](mcp-server/README.md) — includes Codex, OpenCode, and OpenClaw MCP client examples
 - [`metabase/README.md`](metabase/README.md)
 
 ## License

@@ -59,5 +59,5 @@ The `backend/deploy/` folder is for the ingestion runtime only. It does not star
 For downstream analytics deployment guides, see:
 
 - `../../clickhouse/README.md` for loading/querying Rawbbit data in ClickHouse
-- `../../clickhouse-mcp/README.md` for the ClickHouse MCP server and optional Metabase deployment
+- `../../mcp-server/README.md` for the Rawbbit MCP server and optional Metabase deployment
 - `../../metabase/README.md` for standalone Metabase

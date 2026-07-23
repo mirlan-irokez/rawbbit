@@ -452,7 +452,7 @@ private `.env` or a password manager rather than leaving them in shared notes.
 
 ```bash
 openssl rand -hex 32  # ClickHouse admin password
-openssl rand -hex 32  # ClickHouse MCP password
+openssl rand -hex 32  # Rawbbit MCP server password
 openssl rand -hex 32  # ClickHouse Metabase password
 openssl rand -hex 32  # ClickHouse loader password
 openssl rand -hex 32  # MCP bearer token

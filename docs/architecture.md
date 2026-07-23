@@ -81,9 +81,9 @@ In this shape, ClickHouse is not the ingestion source of truth. It is a serving 
 
 See [`../clickhouse/README.md`](../clickhouse/README.md).
 
-### ClickHouse MCP and Metabase layer
+### Rawbbit MCP server and Metabase layer
 
-The ClickHouse MCP server can be deployed after ClickHouse is populated with Rawbbit events. It exposes read-only tools for event discovery, JSON-key discovery, sampling, guarded SQL, DAU, and funnel checks.
+The Rawbbit MCP server can be deployed after ClickHouse is populated with Rawbbit events. It exposes read-only tools for event discovery, JSON-key discovery, sampling, guarded SQL, DAU, and funnel checks.
 
 Metabase can be deployed beside the MCP server as a BI interface over the same ClickHouse data for player and gameplay analysis.
 
@@ -95,7 +95,7 @@ This layer is not part of ingestion. It is a downstream access layer:
 SeaweedFS/S3 Parquet -> ClickHouse loader -> ClickHouse -> MCP clients / AI agents / Metabase
 ```
 
-See [`../clickhouse-mcp/README.md`](../clickhouse-mcp/README.md).
+See [`../mcp-server/README.md`](../mcp-server/README.md).
 
 ### Optional BigQuery and SQLMesh layer
 

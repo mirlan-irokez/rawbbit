@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     env: str = Field(default="local", alias="ENV")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
-    mcp_name: str = Field(default="Rawbbit ClickHouse Analytics", alias="MCP_NAME")
+    mcp_name: str = Field(default="Rawbbit MCP server", alias="MCP_NAME")
     mcp_host: str = Field(default="0.0.0.0", alias="MCP_HOST")
     mcp_port: int = Field(default=8000, alias="MCP_PORT")
     mcp_path: str = Field(default="/mcp", alias="MCP_PATH")

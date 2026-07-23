@@ -370,17 +370,17 @@ Using S3-compatible storage as the ClickHouse table storage disk is a separate o
 
 After ClickHouse has a populated Rawbbit events table, you can expose it through:
 
-- the Rawbbit ClickHouse MCP server for read-only analytical tools
+- the Rawbbit MCP server for read-only analytical tools
 - Metabase for BI dashboards and exploration
 - both on one VM behind bundled Caddy
 
-See [`../clickhouse-mcp/README.md`](../clickhouse-mcp/README.md).
+See [`../mcp-server/README.md`](../mcp-server/README.md).
 
 ## Related Docs
 
 - [`../docs/architecture.md`](../docs/architecture.md)
 - [`../docs/configuration.md`](../docs/configuration.md)
 - [`../docs/quickstart.md`](../docs/quickstart.md)
-- [`../clickhouse-mcp/README.md`](../clickhouse-mcp/README.md)
+- [`../mcp-server/README.md`](../mcp-server/README.md)
 - [ClickHouse S3 integration](https://clickhouse.com/docs/integrations/data-ingestion/s3)
 - [ClickHouse MergeTree schema design](https://clickhouse.com/docs/data-modeling/schema-design)

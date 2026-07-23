@@ -116,11 +116,11 @@ Current raw output includes:
 
 The raw layer stays intentionally simple and mostly string-typed for compatibility and portability.
 
-## Downstream ClickHouse MCP and Metabase settings
+## Downstream Rawbbit MCP server and Metabase settings
 
 The ingestion runtime uses `backend/deploy/.env.example` as its canonical configuration reference.
 
-The optional ClickHouse MCP and combined Metabase deployment has its own environment file under `clickhouse-mcp/.env.example` in the public repository.
+The optional Rawbbit MCP server and combined Metabase deployment has its own environment file under `mcp-server/.env.example` in the public repository.
 
 Main MCP settings:
 
@@ -164,4 +164,4 @@ Notes:
 - ClickHouse should be reachable from the MCP container, but ClickHouse ports should not be casually exposed to the public internet
 - Metabase uses PostgreSQL for application data in the combined deployment
 
-For the deployment walkthrough, see [`../clickhouse-mcp/README.md`](../clickhouse-mcp/README.md).
+For the deployment walkthrough, see [`../mcp-server/README.md`](../mcp-server/README.md).

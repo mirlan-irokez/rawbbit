@@ -28,6 +28,9 @@ This quickstart runs:
 - Metabase
 - PostgreSQL for Metabase application state
 
+Optionally, Dozzle can be enabled as a separate Compose overlay for browser
+and MCP log access.
+
 ## Architecture
 
 ```text
@@ -62,6 +65,15 @@ metabase.yourdomain.com   -> metabase:3000
 clickhouse.yourdomain.com -> clickhouse:8123
 ```
 
+Optional observability path:
+
+```text
+Browser / MCP client
+  -> Caddy :443
+  -> Dozzle :8080
+  -> Docker socket
+```
+
 ClickHouse direct container ports are bound to `127.0.0.1` for SSH tunnels and
 operator checks. The public ClickHouse option is HTTPS through Caddy, not raw
 port `8123` or native TCP port `9000`.
@@ -72,8 +84,10 @@ port `8123` or native TCP port `9000`.
 quickstart/vm_rawbbit_two/
   README.md
   docker-compose.yml
+  docker-compose.dozzle.yml
   .env.example
   Caddyfile
+  Caddyfile.dozzle.example
   bootstrap-host-dirs.sh
   install-hourly-loader-cron.sh
   clickhouse/
@@ -132,12 +146,20 @@ metabase.yourdomain.com   -> VM_PUBLIC_IP
 clickhouse.yourdomain.com -> VM_PUBLIC_IP
 ```
 
+If you want optional browser and MCP log access with Dozzle, also create:
+
+```text
+logs.yourdomain.com       -> VM_PUBLIC_IP
+```
+
 Confirm them before launching:
 
 ```bash
 dig +short mcp.yourdomain.com
 dig +short metabase.yourdomain.com
 dig +short clickhouse.yourdomain.com
+# Optional Dozzle hostname:
+dig +short logs.yourdomain.com
 ```
 
 Caddy needs working DNS and public access to ports 80 and 443 to obtain TLS
@@ -478,6 +500,11 @@ At minimum, replace these values:
 MCP_PUBLIC_HOSTNAME=mcp.yourdomain.com
 METABASE_PUBLIC_HOSTNAME=metabase.yourdomain.com
 CLICKHOUSE_PUBLIC_HOSTNAME=clickhouse.yourdomain.com
+
+# Optional; used only if Dozzle is enabled later.
+DOZZLE_PUBLIC_HOSTNAME=logs.yourdomain.com
+DOZZLE_AUTH_TTL=48h
+
 CLICKHOUSE_ADMIN_PASSWORD=...
 CLICKHOUSE_MCP_PASSWORD=...
 CLICKHOUSE_METABASE_PASSWORD=...
@@ -612,6 +639,113 @@ docker compose down -v
 This quickstart uses host bind mounts for important state, but avoiding
 `down -v` keeps the operational habit simple and prevents accidental named
 volume deletion if the file changes later.
+
+## Optional Dozzle Log Access
+
+Dozzle can be added to an already-running Rawbbit analytics VM for browser log
+viewing and read-only container log access through its MCP endpoint.
+
+This quickstart keeps Dozzle outside the default stack. Start it only when you
+want this operator surface, using the separate overlay file after the user file
+and Caddy route are prepared.
+
+Dozzle shows logs for the analytics VM containers, including ClickHouse, the
+Rawbbit MCP server, Metabase, Postgres, and Caddy.
+
+Dozzle does not enable authentication by default. The provided overlay enables
+Dozzle simple auth and persists its user database under:
+
+```text
+/srv/rawbbit-two/dozzle/users.yml
+```
+
+Create the Dozzle data directory and first admin user:
+
+```bash
+sudo mkdir -p /srv/rawbbit-two/dozzle
+sudo chown -R deploy:deploy /srv/rawbbit-two/dozzle
+
+docker run -it --rm amir20/dozzle:v10.6.13 \
+  generate admin \
+  --email admin@example.com \
+  --name "Admin" \
+  > /srv/rawbbit-two/dozzle/users.yml
+
+chmod 600 /srv/rawbbit-two/dozzle/users.yml
+```
+
+Omit `--password` as shown above so Dozzle prompts for it interactively instead
+of storing the password in shell history.
+
+To expose Dozzle at `https://logs.yourdomain.com`, set:
+
+```env
+DOZZLE_PUBLIC_HOSTNAME=logs.yourdomain.com
+```
+
+Then append the optional Caddy route:
+
+```bash
+grep -q 'DOZZLE_PUBLIC_HOSTNAME' Caddyfile || cat Caddyfile.dozzle.example >> Caddyfile
+```
+
+Validate the combined Compose configuration:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dozzle.yml config
+```
+
+Start Dozzle and update the Caddy container with the Dozzle hostname:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dozzle.yml up -d caddy dozzle
+```
+
+Open:
+
+```text
+https://logs.yourdomain.com
+```
+
+Dozzle MCP is available at:
+
+```text
+https://logs.yourdomain.com/api/mcp
+```
+
+Dozzle MCP authentication is separate from Rawbbit MCP authentication. Do not
+put Dozzle tokens in `MCP_API_KEYS_JSON`; that setting belongs only to the
+Rawbbit analytics MCP server.
+
+With Dozzle simple auth, MCP clients need a JWT from Dozzle:
+
+```bash
+DOZZLE_JWT=$(
+  curl -sSi -X POST https://logs.yourdomain.com/api/token \
+    -F username=admin \
+    -F password="YOUR_DOZZLE_PASSWORD" |
+    tr -d '\r' |
+    awk '/^[Ss]et-[Cc]ookie: jwt=/ { sub(/^[Ss]et-[Cc]ookie: jwt=/, ""); sub(/;.*/, ""); print; exit }'
+)
+
+printf '%s\n' "$DOZZLE_JWT"
+```
+
+Configure MCP clients to send:
+
+```text
+Authorization: Bearer YOUR_DOZZLE_JWT
+```
+
+The MCP endpoint is part of Dozzle's authenticated API group. If the token
+expires, request a new one using the same `/api/token` flow.
+
+Security notes:
+
+- Do not expose Dozzle without authentication.
+- Do not expose Dozzle's raw container port directly.
+- Keep Dozzle shell and container actions disabled.
+- The Docker socket is sensitive even when mounted read-only.
 
 ## 15. First-run initialization
 

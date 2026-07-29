@@ -18,6 +18,9 @@ This quickstart runs:
 - SeaweedFS filer
 - SeaweedFS S3 gateway
 
+Optionally, Dozzle can be enabled as a separate Compose overlay for browser
+and MCP log access.
+
 It is intentionally a single-VM design.
 
 ## Architecture
@@ -50,14 +53,25 @@ nats://nats:4222
 http://seaweed-s3:8333
 ```
 
+Optional observability path:
+
+```text
+Browser / MCP client
+  -> Caddy :443
+  -> Dozzle :8080
+  -> Docker socket
+```
+
 ## Files
 
 ```text
 quickstart/vm_rawbbit_one/
   README.md
   docker-compose.yml
+  docker-compose.dozzle.yml
   .env.example
   Caddyfile
+  Caddyfile.dozzle.example
   nats-server.conf
   bootstrap-host-dirs.sh
   seaweedfs/
@@ -98,6 +112,12 @@ collector.yourdomain.com -> VM_PUBLIC_IP
 s3.yourdomain.com        -> VM_PUBLIC_IP
 ```
 
+If you want optional browser and MCP log access with Dozzle, also create:
+
+```text
+logs.yourdomain.com      -> VM_PUBLIC_IP
+```
+
 The first hostname exposes event ingestion. The second exposes SeaweedFS S3
 through Caddy for external S3 clients such as ClickHouse and operator tools.
 
@@ -106,6 +126,8 @@ through Caddy for external S3 clients such as ClickHouse and operator tools.
 ```bash
 dig +short collector.yourdomain.com
 dig +short s3.yourdomain.com
+# Optional Dozzle hostname:
+dig +short logs.yourdomain.com
 ```
 
 Caddy needs working DNS and public access to ports 80 and 443 to obtain TLS
@@ -464,7 +486,9 @@ tracked files:
 scp -i ~/.ssh/vm_rawbbit_one quickstart/vm_rawbbit_one/.env.example deploy@VM_PUBLIC_IP:/home/deploy/rawbbit-one/.env
 scp -i ~/.ssh/vm_rawbbit_one quickstart/vm_rawbbit_one/bootstrap-host-dirs.sh deploy@VM_PUBLIC_IP:/home/deploy/rawbbit-one/bootstrap-host-dirs.sh
 scp -i ~/.ssh/vm_rawbbit_one quickstart/vm_rawbbit_one/docker-compose.yml deploy@VM_PUBLIC_IP:/home/deploy/rawbbit-one/docker-compose.yml
+scp -i ~/.ssh/vm_rawbbit_one quickstart/vm_rawbbit_one/docker-compose.dozzle.yml deploy@VM_PUBLIC_IP:/home/deploy/rawbbit-one/docker-compose.dozzle.yml
 scp -i ~/.ssh/vm_rawbbit_one quickstart/vm_rawbbit_one/Caddyfile deploy@VM_PUBLIC_IP:/home/deploy/rawbbit-one/Caddyfile
+scp -i ~/.ssh/vm_rawbbit_one quickstart/vm_rawbbit_one/Caddyfile.dozzle.example deploy@VM_PUBLIC_IP:/home/deploy/rawbbit-one/Caddyfile.dozzle.example
 scp -i ~/.ssh/demo_rawbbit_one quickstart/vm_rawbbit_one/nats-server.conf deploy@VM_PUBLIC_IP:/home/deploy/rawbbit-one/nats-server.conf
 scp -i ~/.ssh/vm_rawbbit_one quickstart/vm_rawbbit_one/geoip/dbip-country-lite.mmdb deploy@VM_PUBLIC_IP:/home/deploy/rawbbit-one/geoip/dbip-country-lite.mmdb
 scp -i ~/.ssh/vm_rawbbit_one quickstart/vm_rawbbit_one/seaweedfs/s3.json.example deploy@VM_PUBLIC_IP:/home/deploy/rawbbit-one/seaweedfs/s3.json 
@@ -546,6 +570,10 @@ At minimum, replace these values:
 ```env
 COLLECTOR_PUBLIC_HOSTNAME=collector.yourdomain.com
 S3_PUBLIC_HOSTNAME=s3.yourdomain.com
+
+# Optional; used only if Dozzle is enabled later.
+DOZZLE_PUBLIC_HOSTNAME=logs.yourdomain.com
+DOZZLE_AUTH_TTL=48h
 
 COLLECTOR_API_KEYS_JSON={"YOUR_API_KEY":"your.app.id"}
 IP_HASH_SALT=YOUR_RANDOM_SALT
@@ -751,6 +779,110 @@ docker compose down -v
 This quickstart uses host bind mounts for important state, but avoiding
 `down -v` keeps the operational habit simple and prevents accidental named
 volume deletion if the file is changed later.
+
+## Optional Dozzle Log Access
+
+Dozzle can be added to an already-running Rawbbit VM for browser log viewing
+and read-only container log access through its MCP endpoint.
+
+This quickstart keeps Dozzle outside the default stack. Start it only when you
+want this operator surface, using the separate overlay file after the user file
+and Caddy route are prepared.
+
+Dozzle does not enable authentication by default. The provided overlay enables
+Dozzle simple auth and persists its user database under:
+
+```text
+/srv/rawbbit-one/dozzle/users.yml
+```
+
+Create the Dozzle data directory and first admin user:
+
+```bash
+sudo mkdir -p /srv/rawbbit-one/dozzle
+sudo chown -R deploy:deploy /srv/rawbbit-one/dozzle
+
+docker run -it --rm amir20/dozzle:v10.6.13 \
+  generate admin \
+  --email admin@example.com \
+  --name "Admin" \
+  > /srv/rawbbit-one/dozzle/users.yml
+
+chmod 600 /srv/rawbbit-one/dozzle/users.yml
+```
+
+Omit `--password` as shown above so Dozzle prompts for it interactively instead
+of storing the password in shell history.
+
+To expose Dozzle at `https://logs.yourdomain.com`, set:
+
+```env
+DOZZLE_PUBLIC_HOSTNAME=logs.yourdomain.com
+```
+
+Then append the optional Caddy route:
+
+```bash
+grep -q 'DOZZLE_PUBLIC_HOSTNAME' Caddyfile || cat Caddyfile.dozzle.example >> Caddyfile
+```
+
+Validate the combined Compose configuration:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dozzle.yml config
+```
+
+Start Dozzle and update the Caddy container with the Dozzle hostname:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dozzle.yml up -d caddy dozzle
+```
+
+Open:
+
+```text
+https://logs.yourdomain.com
+```
+
+Dozzle MCP is available at:
+
+```text
+https://logs.yourdomain.com/api/mcp
+```
+
+Dozzle MCP authentication is separate from Rawbbit MCP authentication. Do not
+put Dozzle tokens in `MCP_API_KEYS_JSON`; that setting belongs only to the
+Rawbbit analytics MCP server.
+
+With Dozzle simple auth, MCP clients need a JWT from Dozzle:
+
+```bash
+DOZZLE_JWT=$(
+  curl -sSi -X POST https://logs.yourdomain.com/api/token \
+    -F username=admin \
+    -F password="YOUR_DOZZLE_PASSWORD" |
+    tr -d '\r' |
+    awk '/^[Ss]et-[Cc]ookie: jwt=/ { sub(/^[Ss]et-[Cc]ookie: jwt=/, ""); sub(/;.*/, ""); print; exit }'
+)
+
+printf '%s\n' "$DOZZLE_JWT"
+```
+
+Configure MCP clients to send:
+
+```text
+Authorization: Bearer YOUR_DOZZLE_JWT
+```
+
+The MCP endpoint is part of Dozzle's authenticated API group. If the token
+expires, request a new one using the same `/api/token` flow.
+
+Security notes:
+
+- Do not expose Dozzle without authentication.
+- Do not expose Dozzle's raw container port directly.
+- Keep Dozzle shell and container actions disabled.
+- The Docker socket is sensitive even when mounted read-only.
 
 ## Verification
 

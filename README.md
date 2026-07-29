@@ -39,9 +39,10 @@ Production-oriented OSS deployment is split into two provider-neutral VM
 guides:
 
 - VM one runs ingestion and raw object storage: Caddy, NATS JetStream,
-  collector-api, raw-writer, and SeaweedFS
+  collector-api, raw-writer, and SeaweedFS, with optional Dozzle log access
 - VM two runs analytics and access surfaces: ClickHouse, the Rawbbit MCP
-  server, Metabase, and Postgres for Metabase state
+  server, Metabase, and Postgres for Metabase state, with optional Dozzle log
+  access
 
 The boundary between the VMs is the raw Parquet layer in S3-compatible object
 storage.
@@ -91,13 +92,15 @@ For the deeper architecture note, see [`docs/architecture.md`](docs/architecture
 For the recommended provider-neutral ingestion VM deployment guide, see
 [`quickstart/vm_rawbbit_one/README.md`](quickstart/vm_rawbbit_one/README.md).
 It deploys Caddy, NATS JetStream, collector-api, raw-writer, and SeaweedFS with
-persistent host storage.
+persistent host storage. It also documents optional Dozzle browser log access
+and Dozzle MCP access for inspecting ingestion VM containers.
 
 For the matching analytics VM deployment guide, see
 [`quickstart/vm_rawbbit_two/README.md`](quickstart/vm_rawbbit_two/README.md).
 It deploys ClickHouse, the Rawbbit MCP server, Metabase, and Postgres for
 Metabase state. It reads Parquet from the VM-one S3-compatible endpoint and
-loads it into ClickHouse.
+loads it into ClickHouse. It also documents optional Dozzle browser log access
+and Dozzle MCP access for inspecting analytics VM containers.
 
 For local validation and development, keep using [`docs/quickstart.md`](docs/quickstart.md).
 

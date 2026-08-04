@@ -142,5 +142,7 @@ If the flow does not complete, check:
 - `architecture.md`
 - `configuration.md`
 - `../clickhouse/README.md` for the main ClickHouse query/loading path
+- `../dbt_project/README.md` for scheduled ClickHouse ingestion and backfills
+- `../quickstart/vm_rawbbit_two/README.md` for the complete analytics VM deployment
 - `../mcp-server/README.md` for the Rawbbit MCP server and optional Metabase deploy path
 - `../metabase/README.md` for standalone Metabase deployment

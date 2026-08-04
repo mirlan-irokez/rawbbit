@@ -1,0 +1,23 @@
+version: 2
+
+models:
+  - name: rawbbit_events_load
+    description: >-
+      Optional bounded Parquet loader for the existing analytics.events table.
+      Selected only when RAWBBIT_RAW_LOAD_MODE=dbt.
+    config:
+      contract:
+        enforced: false
+    columns:
+      - name: event_id
+        description: Event identifier used with app_id as the replay key.
+        data_tests:
+          - not_null
+      - name: app_id
+        description: Application identifier used with event_id as the replay key.
+        data_tests:
+          - not_null
+      - name: event_time
+        description: Parsed UTC event timestamp.
+        data_tests:
+          - not_null

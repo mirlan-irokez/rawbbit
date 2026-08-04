@@ -239,7 +239,7 @@ CREATE TABLE IF NOT EXISTS analytics.events
 )
 ENGINE = MergeTree
 PARTITION BY toYYYYMM(event_date)
-ORDER BY (app_id, event_name, event_time, event_id);
+ORDER BY (app_id, environment, event_name, event_date, user_pseudo_id, event_time);
 ```
 
 This is a practical starter schema, not a universal final model. Change the `ORDER BY` key to match your common query predicates. In ClickHouse, the `MergeTree` engine and ordering key are physical design choices, not decoration.
@@ -305,45 +305,64 @@ FROM
 WHERE event_time IS NOT NULL;
 ```
 
-The `SELECT DISTINCT` is a defensive first-pass dedupe for replayed files or duplicate raw rows. For stricter idempotency, build a dedicated staging-and-merge flow around `event_id`.
+This manual insert is useful for exploration, but `SELECT DISTINCT` only
+deduplicates identical rows within the current query. Repeating the same query
+can append duplicate events to an ordinary `MergeTree` target. Use the
+scheduled dbt ingestion path below for repeatable production windows.
 
-## Hourly Loader Pattern
+## Scheduled dbt Ingestion
 
-A simple first production shape is:
+The recommended production shape is:
 
 ```text
-Rawbbit raw Parquet -> hourly loader -> analytics.events
+Rawbbit raw Parquet -> scheduled dbt Core runner -> analytics.events
 ```
 
-For the current OSS path, treat this hourly loader as the normal bridge between the portable raw layer and the ClickHouse serving table. The loader can be hardened over time with stronger replay, backfill, and observability controls, but this is the intended main query path.
+The persistent `dbt-runner` container executes one incremental ingestion model
+and its data tests. It reads explicit hourly Parquet paths through the
+`rawbbit_raw_s3` ClickHouse named collection, so an empty window succeeds with
+zero input rows while storage, credential, or invalid-Parquet failures still
+fail the build.
 
-Example loader environment:
+The model uses `(app_id, event_id)` as its stable key. Within each selected
+window it chooses one winner per key and uses dbt-clickhouse's `delete_insert`
+strategy to replace matching target keys. Short hourly lookbacks, a longer
+daily reconciliation window, and chunked manual backfills can therefore overlap
+without duplicating event keys.
+
+`dbt build` materializes the selected model and then runs its data tests. The
+current project contains only this ingestion model; it does not yet create
+staging or mart tables.
+
+S3 credentials stay inside ClickHouse's named collection. The dbt container
+receives only dedicated ClickHouse credentials, and the dbt user receives the
+narrow table, S3, and named-collection permissions needed by this model. Do not
+use the ClickHouse admin account for scheduled dbt jobs.
+
+See the [dbt project guide](../dbt_project/README.md) and the
+[VM-two quickstart](../quickstart/vm_rawbbit_two/README.md) for schedules,
+configuration, cutover, backfills, logs, and rollback.
+
+## Legacy Shell Loader
+
+The existing `clickhouse/load_events_hourly.sh` path remains available as a
+rollback or compatibility option. It loads the previous UTC hour and is
+scheduled by host cron.
+
+Raw ingestion must have exactly one owner. Set:
 
 ```env
-CLICKHOUSE_USER=admin
-CLICKHOUSE_PASSWORD=replace_with_a_strong_password
-CLICKHOUSE_RAW_S3_ACCESS_KEY=your-access-key
-CLICKHOUSE_RAW_S3_SECRET_KEY=your-secret-key
-CLICKHOUSE_SEAWEED_S3_ENDPOINT=https://s3.example.com
-CLICKHOUSE_RAW_S3_BUCKET=your-bucket
-CLICKHOUSE_RAW_S3_PREFIX=raw
+RAWBBIT_RAW_LOAD_MODE=legacy
 ```
 
-The loader uses the S3 endpoint, bucket, and prefix as the source of truth for both the ClickHouse `s3()` URL and the `aws s3 ls` preflight. Keep the endpoint as the S3 API host only; do not include the bucket or raw prefix in it.
+before installing or running the legacy loader. In `dbt` mode the shell loader
+exits without loading, and the cron installer refuses to add a legacy job. Both
+implementations use the same lock file so they cannot overlap accidentally.
 
-The loader computes the previous hour and expands the final URL as:
-
-```text
-${CLICKHOUSE_SEAWEED_S3_ENDPOINT}/${CLICKHOUSE_RAW_S3_BUCKET}/${CLICKHOUSE_RAW_S3_PREFIX}/*/event_date=YYYY-MM-DD/hour=HH/*.parquet
-```
-
-Example Linux cron entry:
-
-```cron
-5 * * * * /opt/clickhouse/load_events_hourly.sh >> /opt/clickhouse/logs/load_events_hourly.log 2>&1
-```
-
-This means: at minute `05` every hour, load the previous hour's raw files.
+Unlike the dbt ingestion model, the legacy loader does not provide keyed
+replacement, daily late-file reconciliation, or parameterized backfills. Use
+the detailed rollback procedure in the VM-two quickstart rather than enabling
+both paths.
 
 ## Direct S3 Reads vs Local Tables
 
@@ -381,6 +400,8 @@ See [`../mcp-server/README.md`](../mcp-server/README.md).
 - [`../docs/architecture.md`](../docs/architecture.md)
 - [`../docs/configuration.md`](../docs/configuration.md)
 - [`../docs/quickstart.md`](../docs/quickstart.md)
+- [`../dbt_project/README.md`](../dbt_project/README.md)
+- [`../quickstart/vm_rawbbit_two/README.md`](../quickstart/vm_rawbbit_two/README.md)
 - [`../mcp-server/README.md`](../mcp-server/README.md)
 - [ClickHouse S3 integration](https://clickhouse.com/docs/integrations/data-ingestion/s3)
 - [ClickHouse MergeTree schema design](https://clickhouse.com/docs/data-modeling/schema-design)

@@ -16,8 +16,8 @@ Main Rawbbit path:
 ```text
 Producer -> Collector API -> NATS JetStream -> Raw Writer
   -> S3-compatible object storage / SeaweedFS Parquet
-  -> ClickHouse loader cron job
-  -> ClickHouse
+  -> scheduled dbt ingestion
+  -> ClickHouse analytics.events
   -> MCP / Metabase / agents / users
 ```
 
@@ -40,9 +40,9 @@ guides:
 
 - VM one runs ingestion and raw object storage: Caddy, NATS JetStream,
   collector-api, raw-writer, and SeaweedFS, with optional Dozzle log access
-- VM two runs analytics and access surfaces: ClickHouse, the Rawbbit MCP
-  server, Metabase, and Postgres for Metabase state, with optional Dozzle log
-  access
+- VM two runs analytics and access surfaces: ClickHouse, the scheduled Rawbbit
+  dbt runner, the Rawbbit MCP server, Metabase, and Postgres for Metabase state,
+  with optional Dozzle log access
 
 The boundary between the VMs is the raw Parquet layer in S3-compatible object
 storage.
@@ -67,6 +67,7 @@ This repository contains the public game-telemetry ingestion-to-analytics path:
 - `backend/raw-writer` — JetStream consumer that writes partitioned Parquet files
 - `backend/deploy/` — Docker Compose and environment scaffolding for local or simple self-hosted setups
 - `clickhouse/` — main analytical/query path for loading and querying raw game telemetry in ClickHouse
+- `dbt_project/` — scheduled dbt Core ingestion from bounded Parquet windows into `analytics.events`
 - `mcp-server/` — Rawbbit MCP server, MCP client setup, and combined MCP + Metabase deployment guide
 - AI agents and MCP clients such as Codex, OpenCode, and OpenClaw can connect to the Rawbbit MCP server endpoint for read-only analytics exploration
 - `metabase/` — optional standalone Metabase deployment guide
@@ -81,6 +82,7 @@ The system is built around a few explicit boundaries:
 - [NATS JetStream](https://nats.io/) separates request handling from storage writes
 - the raw writer lands durable Parquet files in object storage
 - raw Parquet is the system-of-record boundary for downstream telemetry work
+- scheduled dbt ingestion reconciles bounded Parquet windows into `analytics.events`; the shell loader remains a mutually exclusive legacy fallback
 - ClickHouse is the main analytical database and serving path for retention, funnel, session, and event analysis
 - MCP, Metabase, agents, and direct SQL are consumption surfaces on top of ClickHouse
 - downstream modeling can evolve without changing the ingestion contract
@@ -97,10 +99,11 @@ and Dozzle MCP access for inspecting ingestion VM containers.
 
 For the matching analytics VM deployment guide, see
 [`quickstart/vm_rawbbit_two/README.md`](quickstart/vm_rawbbit_two/README.md).
-It deploys ClickHouse, the Rawbbit MCP server, Metabase, and Postgres for
-Metabase state. It reads Parquet from the VM-one S3-compatible endpoint and
-loads it into ClickHouse. It also documents optional Dozzle browser log access
-and Dozzle MCP access for inspecting analytics VM containers.
+It deploys ClickHouse, the persistent Rawbbit dbt runner, the Rawbbit MCP
+server, Metabase, and Postgres for Metabase state. The dbt runner reads bounded
+Parquet windows from the VM-one S3-compatible endpoint and loads them into
+ClickHouse. It also documents optional Dozzle browser log access and Dozzle MCP
+access for inspecting analytics VM containers.
 
 For local validation and development, keep using [`docs/quickstart.md`](docs/quickstart.md).
 
@@ -121,6 +124,7 @@ Rawbbit publishes public service images to GHCR:
 - `ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.7`
 - `ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.8`
 - `ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2`
+- `ghcr.io/mirlan-irokez/rawbbit-dbt-runner:0.1.1`
 
 The same images also have `latest` tags for convenience. Prefer pinned version tags for deployments.
 
@@ -133,7 +137,8 @@ Secrets are not baked into these images. Provide API keys, storage credentials, 
 
 ## Configuration
 
-The canonical environment-variable reference is `backend/deploy/.env.example`.
+The ingestion VM uses `backend/deploy/.env.example`; the ClickHouse/dbt
+analytics VM uses `quickstart/vm_rawbbit_two/.env.example`.
 
 Important configuration groups:
 
@@ -141,6 +146,7 @@ Important configuration groups:
 - collector API limits, API keys, CORS settings, and optional GeoIP-related attribution requirements
 - raw-writer batching and ACK behavior
 - object-storage bucket, prefix, and credentials
+- dbt ingestion ownership, reconciliation windows, backfill chunking, and ClickHouse limits
 
 For the grouped configuration guide, see [`docs/configuration.md`](docs/configuration.md).
 
@@ -153,6 +159,7 @@ backend/
   deploy/          Local and self-hosted runtime scaffolding
 sqlmesh_project/   Optional BigQuery SQLMesh starter model
 clickhouse/        Main ClickHouse query/loading path
+dbt_project/       Scheduled ClickHouse ingestion project
 mcp-server/        Rawbbit MCP server and optional Metabase deploy path
 metabase/          Metabase OSS ver. deploy instructions
 quickstart/        Provider-neutral VM deployment guides
@@ -166,6 +173,7 @@ Component reference notes:
 - [`backend/raw-writer/README.md`](backend/raw-writer/README.md)
 - [`backend/deploy` runtime notes](backend/deploy/README.md)
 - [`clickhouse/README.md`](clickhouse/README.md)
+- [`dbt_project/README.md`](dbt_project/README.md)
 - [`mcp-server/README.md`](mcp-server/README.md)
 - [`metabase/README.md`](metabase/README.md)
 
@@ -177,7 +185,8 @@ Current maturity:
 - raw Parquet landing path is implemented
 - raw storage backend selection is implemented for both GCS and S3-compatible targets
 - SeaweedFS/S3-compatible storage is the preferred OSS raw-storage path
-- ClickHouse loading from raw Parquet is the main analytical/query path for player telemetry
+- scheduled dbt loading from raw Parquet into ClickHouse is the main analytical/query path for player telemetry; the legacy shell loader remains available for rollback
+- the current dbt project contains one ingestion model plus data tests; staging and mart models are intentionally deferred until their requirements are defined
 - Rawbbit MCP server can expose a read-only analytical tool surface over a configured Rawbbit ClickHouse events table
 - AI agents and MCP clients can use that MCP surface without direct access to the ingestion runtime
 - Metabase can be deployed separately or together with the Rawbbit MCP server package
@@ -196,6 +205,7 @@ The included [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) model is inten
 - [`docs/quickstart.md`](docs/quickstart.md)
 - [`docs/configuration.md`](docs/configuration.md)
 - [`clickhouse/README.md`](clickhouse/README.md)
+- [`dbt_project/README.md`](dbt_project/README.md)
 - [`mcp-server/README.md`](mcp-server/README.md) — includes Codex, OpenCode, and OpenClaw MCP client examples
 - [`metabase/README.md`](metabase/README.md)
 

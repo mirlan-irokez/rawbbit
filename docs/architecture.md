@@ -12,8 +12,8 @@ Main Rawbbit path:
 ```text
 Producer -> Collector API -> NATS JetStream -> Raw Writer
   -> S3-compatible object storage / SeaweedFS Parquet
-  -> ClickHouse loader cron job
-  -> ClickHouse
+  -> scheduled dbt ingestion
+  -> ClickHouse analytics.events
   -> MCP / Metabase / agents / users
 ```
 
@@ -73,13 +73,30 @@ This layer:
 - separates ingestion concerns from downstream query and modeling concerns
 - makes it possible to change downstream tooling without changing the ingestion contract
 
-### ClickHouse serving layer
+### dbt ingestion and ClickHouse serving layer
 
 ClickHouse is the main analytical database and serving layer over raw Parquet.
 
-In this shape, ClickHouse is not the ingestion source of truth. It is a serving analytical database populated from raw Parquet, usually by the hourly loader into local `MergeTree` tables for faster analytics over level funnels, session activity, retention checks, economy events, and other telemetry queries.
+ClickHouse is not the ingestion source of truth. The durable boundary remains
+raw Parquet. A persistent dbt Core runner loads bounded Parquet windows into
+the local `analytics.events` `MergeTree` table and runs ingestion data tests.
+The current dbt project contains one ingestion model; staging and mart models
+can be added later when their grains and consumers are defined.
+
+The runner processes a short overlapping window hourly and reconciles a longer
+window daily for late files. Manual backfills use explicit, hour-aligned UTC
+ranges and smaller chunks. All dbt jobs and the legacy shell loader share one
+lock, while `RAWBBIT_RAW_LOAD_MODE` gives exactly one path ownership of raw
+ingestion.
+
+Within each selected window, dbt keeps one winner per `(app_id, event_id)` and
+uses the ClickHouse adapter's `delete_insert` incremental strategy to replace
+matching keys. This makes overlapping schedules and replayed windows safe at
+the event-key level. The legacy hourly shell loader remains available as a
+mutually exclusive rollback path.
 
 See [`../clickhouse/README.md`](../clickhouse/README.md).
+See [`../dbt_project/README.md`](../dbt_project/README.md).
 
 ### Rawbbit MCP server and Metabase layer
 
@@ -92,7 +109,7 @@ MCP clients can include AI coding or operations agents such as OpenCode, OpenCla
 This layer is not part of ingestion. It is a downstream access layer:
 
 ```text
-SeaweedFS/S3 Parquet -> ClickHouse loader -> ClickHouse -> MCP clients / AI agents / Metabase
+SeaweedFS/S3 Parquet -> dbt ingestion -> ClickHouse -> MCP clients / AI agents / Metabase
 ```
 
 See [`../mcp-server/README.md`](../mcp-server/README.md).
@@ -125,4 +142,5 @@ That means:
 
 - duplicate events are possible
 - the collector reduces duplicate inserts within the JetStream dedupe window using `(app_id, event_id)`
-- downstream consumers should still treat `event_id` as the stable event identity key for player and gameplay events
+- the ClickHouse dbt ingestion model uses `(app_id, event_id)` as its replacement key
+- downstream consumers should treat the pair, rather than `event_id` alone, as the stable event identity

@@ -16,10 +16,23 @@ dirs=(
   "${ROOT_DIR}/caddy/config"
 )
 
+runtime_owner="${RAWBBIT_TWO_RUNTIME_OWNER:-${SUDO_USER:-root}}"
+runtime_group="$(id -gn "${runtime_owner}")"
+runtime_dirs=(
+  "${ROOT_DIR}/dbt"
+  "${ROOT_DIR}/dbt/logs"
+  "${ROOT_DIR}/dbt/target"
+)
+
 echo "Creating Rawbbit two-VM host directories under ${ROOT_DIR}"
 for dir in "${dirs[@]}"; do
   install -d -m 0755 "${dir}"
   echo "created_or_verified ${dir}"
+done
+
+for dir in "${runtime_dirs[@]}"; do
+  install -d -m 0755 -o "${runtime_owner}" -g "${runtime_group}" "${dir}"
+  echo "created_or_verified ${dir} owner=${runtime_owner}:${runtime_group}"
 done
 
 echo

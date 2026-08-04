@@ -1,0 +1,10 @@
+<clickhouse>
+    <!-- Values are supplied to the ClickHouse container at runtime. -->
+    <named_collections>
+        <rawbbit_raw_s3>
+            <url from_env="CLICKHOUSE_RAW_S3_URL" overridable="false" />
+            <access_key_id from_env="CLICKHOUSE_RAW_S3_ACCESS_KEY" overridable="false" />
+            <secret_access_key from_env="CLICKHOUSE_RAW_S3_SECRET_KEY" overridable="false" />
+        </rawbbit_raw_s3>
+    </named_collections>
+</clickhouse>

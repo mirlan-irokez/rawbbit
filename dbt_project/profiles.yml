@@ -1,0 +1,18 @@
+rawbbit:
+  target: production
+  outputs:
+    production:
+      type: clickhouse
+      host: "{{ env_var('CLICKHOUSE_HOST', 'clickhouse') }}"
+      port: "{{ env_var('CLICKHOUSE_PORT', '8123') | int }}"
+      schema: "{{ env_var('CLICKHOUSE_DATABASE', 'analytics') }}"
+      user: "{{ env_var('CLICKHOUSE_DBT_USER') }}"
+      password: "{{ env_var('CLICKHOUSE_DBT_PASSWORD') }}"
+      secure: "{{ env_var('CLICKHOUSE_SECURE', '0') | int == 1 }}"
+      verify: "{{ env_var('CLICKHOUSE_VERIFY', '1') | int == 1 }}"
+      threads: "{{ env_var('DBT_THREADS', '2') | int }}"
+      connect_timeout: 10
+      send_receive_timeout: 600
+      use_lw_deletes: true
+      custom_settings:
+        max_threads: "{{ env_var('DBT_CLICKHOUSE_MAX_THREADS', '2') | int }}"

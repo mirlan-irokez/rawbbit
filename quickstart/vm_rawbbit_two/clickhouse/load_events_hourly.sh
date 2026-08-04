@@ -42,10 +42,30 @@ for key in \
   CLICKHOUSE_RAW_S3_SECRET_KEY \
   CLICKHOUSE_SEAWEED_S3_ENDPOINT \
   CLICKHOUSE_RAW_S3_BUCKET \
-  CLICKHOUSE_RAW_S3_PREFIX
+  CLICKHOUSE_RAW_S3_PREFIX \
+  RAWBBIT_RAW_LOAD_MODE \
+  RAWBBIT_DBT_LOCK_FILE
 do
   load_env_key "$key"
 done
+
+RAWBBIT_RAW_LOAD_MODE="${RAWBBIT_RAW_LOAD_MODE:-legacy}"
+if [[ "$RAWBBIT_RAW_LOAD_MODE" != "legacy" ]]; then
+  echo "$(date -u '+%F %T') RAWBBIT_RAW_LOAD_MODE=${RAWBBIT_RAW_LOAD_MODE}; legacy loader is disabled"
+  exit 0
+fi
+
+RAWBBIT_DBT_LOCK_FILE="${RAWBBIT_DBT_LOCK_FILE:-/srv/rawbbit-two/dbt/pipeline.lock}"
+if [[ ! -d "$(dirname "$RAWBBIT_DBT_LOCK_FILE")" ]]; then
+  echo "Missing lock directory $(dirname "$RAWBBIT_DBT_LOCK_FILE"); run bootstrap-host-dirs.sh." >&2
+  exit 1
+fi
+
+exec 9>"$RAWBBIT_DBT_LOCK_FILE"
+if ! flock -n 9; then
+  echo "$(date -u '+%F %T') another Rawbbit pipeline job holds ${RAWBBIT_DBT_LOCK_FILE}; skipping"
+  exit 0
+fi
 
 : "${CLICKHOUSE_LOADER_USER:?CLICKHOUSE_LOADER_USER is required}"
 : "${CLICKHOUSE_LOADER_PASSWORD:?CLICKHOUSE_LOADER_PASSWORD is required}"

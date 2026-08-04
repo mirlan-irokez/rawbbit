@@ -1,0 +1,22 @@
+name: rawbbit
+version: 1.0.0
+config-version: 2
+
+profile: rawbbit
+
+flags:
+  send_anonymous_usage_stats: false
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+clean-targets: ["target", "logs", "dbt_packages"]
+
+vars:
+  rawbbit_default_lookback_hours: 3
+  rawbbit_max_model_window_hours: 168
+
+models:
+  rawbbit:
+    ingestion:
+      +materialized: incremental

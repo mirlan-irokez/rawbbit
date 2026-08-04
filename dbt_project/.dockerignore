@@ -1,0 +1,8 @@
+.git
+.gitignore
+.venv
+logs
+target
+dbt_packages
+*.pyc
+__pycache__

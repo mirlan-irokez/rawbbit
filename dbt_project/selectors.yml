@@ -1,0 +1,7 @@
+selectors:
+  - name: rawbbit_ingestion
+    description: Load raw Parquet events into analytics.events and run its tests.
+    definition:
+      method: path
+      value: models/ingestion
+      children: true

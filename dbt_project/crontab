@@ -1,0 +1,4 @@
+# Supercronic uses UTC because the image sets TZ=UTC.
+# The wrapper skips a scheduled run when another pipeline job holds the lock.
+12 * * * * /app/bin/dbt-job hourly
+30 3 * * * /app/bin/dbt-job daily

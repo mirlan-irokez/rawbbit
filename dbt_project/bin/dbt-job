@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+COMMAND="${1:-}"
+LOCK_FILE="${RAWBBIT_DBT_LOCK_FILE:-/app/runtime/pipeline.lock}"
+RAW_LOAD_MODE="${RAWBBIT_RAW_LOAD_MODE:-legacy}"
+HOURLY_LOOKBACK_HOURS="${RAWBBIT_DBT_HOURLY_LOOKBACK_HOURS:-3}"
+DAILY_LOOKBACK_DAYS="${RAWBBIT_DBT_DAILY_LOOKBACK_DAYS:-3}"
+BACKFILL_CHUNK_HOURS="${RAWBBIT_DBT_BACKFILL_CHUNK_HOURS:-24}"
+
+log() {
+  printf '%s %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"
+}
+
+fail() {
+  log "ERROR $*" >&2
+  exit 1
+}
+
+validate_positive_integer() {
+  local name="$1"
+  local value="$2"
+  [[ "$value" =~ ^[1-9][0-9]*$ ]] || fail "${name} must be a positive integer"
+}
+
+validate_timestamp() {
+  local value="$1"
+  [[ "$value" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:00:00Z$ ]] \
+    || fail "timestamp must be hour-aligned UTC (YYYY-MM-DDTHH:00:00Z): ${value}"
+  date -u -d "$value" '+%s' >/dev/null 2>&1 \
+    || fail "invalid UTC timestamp: ${value}"
+}
+
+iso_from_epoch() {
+  date -u -d "@$1" '+%Y-%m-%dT%H:00:00Z'
+}
+
+run_window() {
+  local window_start="$1"
+  local window_end="$2"
+
+  validate_timestamp "$window_start"
+  validate_timestamp "$window_end"
+
+  log "dbt build mode=${RAW_LOAD_MODE} selector=rawbbit_ingestion window_start=${window_start} window_end=${window_end}"
+  dbt build \
+    --project-dir /app \
+    --profiles-dir /app \
+    --selector rawbbit_ingestion \
+    --fail-fast \
+    --vars "{rawbbit_window_start: '${window_start}', rawbbit_window_end: '${window_end}'}"
+}
+
+run_hourly() {
+  local end_epoch
+  local start_epoch
+
+  validate_positive_integer RAWBBIT_DBT_HOURLY_LOOKBACK_HOURS "$HOURLY_LOOKBACK_HOURS"
+  end_epoch="$(date -u -d "$(date -u '+%Y-%m-%dT%H:00:00Z')" '+%s')"
+  start_epoch="$((end_epoch - HOURLY_LOOKBACK_HOURS * 3600))"
+  run_window "$(iso_from_epoch "$start_epoch")" "$(iso_from_epoch "$end_epoch")"
+}
+
+run_daily() {
+  local end_epoch
+  local start_epoch
+
+  validate_positive_integer RAWBBIT_DBT_DAILY_LOOKBACK_DAYS "$DAILY_LOOKBACK_DAYS"
+  end_epoch="$(date -u -d "$(date -u '+%Y-%m-%dT00:00:00Z')" '+%s')"
+  start_epoch="$((end_epoch - DAILY_LOOKBACK_DAYS * 86400))"
+  run_window "$(iso_from_epoch "$start_epoch")" "$(iso_from_epoch "$end_epoch")"
+}
+
+run_backfill() {
+  local window_start="${2:-}"
+  local window_end="${3:-}"
+  local current_epoch
+  local end_epoch
+  local chunk_end_epoch
+
+  [[ -n "$window_start" && -n "$window_end" ]] \
+    || fail "usage: dbt-job backfill START_UTC END_UTC"
+  validate_timestamp "$window_start"
+  validate_timestamp "$window_end"
+  validate_positive_integer RAWBBIT_DBT_BACKFILL_CHUNK_HOURS "$BACKFILL_CHUNK_HOURS"
+
+  current_epoch="$(date -u -d "$window_start" '+%s')"
+  end_epoch="$(date -u -d "$window_end" '+%s')"
+  (( current_epoch < end_epoch )) || fail "backfill end must be after start"
+
+  while (( current_epoch < end_epoch )); do
+    chunk_end_epoch="$((current_epoch + BACKFILL_CHUNK_HOURS * 3600))"
+    if (( chunk_end_epoch > end_epoch )); then
+      chunk_end_epoch="$end_epoch"
+    fi
+    run_window "$(iso_from_epoch "$current_epoch")" "$(iso_from_epoch "$chunk_end_epoch")"
+    current_epoch="$chunk_end_epoch"
+  done
+}
+
+if [[ "${RAWBBIT_DBT_MIRROR_PID1:-0}" == "1" ]]; then
+  exec > >(tee /proc/1/fd/1) 2> >(tee /proc/1/fd/2 >&2)
+fi
+
+case "$COMMAND" in
+  hourly|daily|backfill) ;;
+  *) fail "usage: dbt-job {hourly|daily|backfill START_UTC END_UTC}" ;;
+esac
+
+case "$RAW_LOAD_MODE" in
+  dbt) ;;
+  legacy)
+    if [[ "$COMMAND" == "backfill" ]]; then
+      fail "dbt backfill requires RAWBBIT_RAW_LOAD_MODE=dbt"
+    fi
+    log "RAWBBIT_RAW_LOAD_MODE=legacy; dbt ingestion is disabled; skipping ${COMMAND}"
+    exit 0
+    ;;
+  *) fail "RAWBBIT_RAW_LOAD_MODE must be dbt or legacy, got: ${RAW_LOAD_MODE}" ;;
+esac
+
+mkdir -p "$(dirname "$LOCK_FILE")"
+exec 9>"$LOCK_FILE"
+
+case "$COMMAND" in
+  hourly|daily)
+    if ! flock -n 9; then
+      log "another Rawbbit pipeline job holds ${LOCK_FILE}; skipping scheduled ${COMMAND} run"
+      exit 0
+    fi
+    ;;
+  backfill)
+    log "waiting for Rawbbit pipeline lock ${LOCK_FILE}"
+    flock 9
+    ;;
+esac
+
+log "starting command=${COMMAND} mode=${RAW_LOAD_MODE}"
+case "$COMMAND" in
+  hourly) run_hourly ;;
+  daily) run_daily ;;
+  backfill) run_backfill "$@" ;;
+esac
+log "completed command=${COMMAND} mode=${RAW_LOAD_MODE}"

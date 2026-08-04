@@ -116,6 +116,43 @@ Current raw output includes:
 
 The raw layer stays intentionally simple and mostly string-typed for compatibility and portability.
 
+## ClickHouse dbt ingestion settings
+
+The VM-two quickstart has a separate `.env.example` for its ClickHouse and dbt
+runtime. The main dbt settings are:
+
+- `RAWBBIT_RAW_LOAD_MODE` (`dbt` or `legacy`)
+- `DBT_RUNNER_IMAGE`
+- `DBT_RUNNER_UID`
+- `DBT_RUNNER_GID`
+- `DBT_THREADS`
+- `DBT_CLICKHOUSE_MAX_THREADS`
+- `RAWBBIT_DBT_HOURLY_LOOKBACK_HOURS`
+- `RAWBBIT_DBT_DAILY_LOOKBACK_DAYS`
+- `RAWBBIT_DBT_BACKFILL_CHUNK_HOURS`
+- `CLICKHOUSE_DBT_USER`
+- `CLICKHOUSE_DBT_PASSWORD`
+- `CLICKHOUSE_RAW_S3_URL`
+- `CLICKHOUSE_RAW_S3_ACCESS_KEY`
+- `CLICKHOUSE_RAW_S3_SECRET_KEY`
+
+`RAWBBIT_RAW_LOAD_MODE` selects the sole owner of `analytics.events` raw
+ingestion. In `dbt` mode, scheduled dbt jobs load bounded Parquet windows and
+run their data tests. In `legacy` mode, scheduled dbt jobs skip and the host
+shell loader can run instead. Both paths use the same pipeline lock.
+
+The public dbt-runner image runs as UID/GID `1000:1000`. If the host deployment
+user differs, build a local image with matching IDs so the container can write
+its bind-mounted logs, artifacts, and lock file.
+
+S3 credentials remain in ClickHouse's `rawbbit_raw_s3` named collection. The
+dbt container receives only its ClickHouse service-user credentials, and the
+named-collection values are non-overridable so storage secrets do not appear
+in compiled dbt SQL or artifacts.
+
+See [`../dbt_project/README.md`](../dbt_project/README.md) and the
+[`VM-two quickstart`](../quickstart/vm_rawbbit_two/README.md).
+
 ## Downstream Rawbbit MCP server and Metabase settings
 
 The ingestion runtime uses `backend/deploy/.env.example` as its canonical configuration reference.

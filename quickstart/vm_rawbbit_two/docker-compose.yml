@@ -46,6 +46,11 @@ services:
       CLICKHOUSE_METABASE_PASSWORD: ${CLICKHOUSE_METABASE_PASSWORD:?CLICKHOUSE_METABASE_PASSWORD is required}
       CLICKHOUSE_LOADER_USER: ${CLICKHOUSE_LOADER_USER:?CLICKHOUSE_LOADER_USER is required}
       CLICKHOUSE_LOADER_PASSWORD: ${CLICKHOUSE_LOADER_PASSWORD:?CLICKHOUSE_LOADER_PASSWORD is required}
+      CLICKHOUSE_DBT_USER: ${CLICKHOUSE_DBT_USER:?CLICKHOUSE_DBT_USER is required}
+      CLICKHOUSE_DBT_PASSWORD: ${CLICKHOUSE_DBT_PASSWORD:?CLICKHOUSE_DBT_PASSWORD is required}
+      CLICKHOUSE_RAW_S3_URL: ${CLICKHOUSE_RAW_S3_URL:?CLICKHOUSE_RAW_S3_URL is required}
+      CLICKHOUSE_RAW_S3_ACCESS_KEY: ${CLICKHOUSE_RAW_S3_ACCESS_KEY:?CLICKHOUSE_RAW_S3_ACCESS_KEY is required}
+      CLICKHOUSE_RAW_S3_SECRET_KEY: ${CLICKHOUSE_RAW_S3_SECRET_KEY:?CLICKHOUSE_RAW_S3_SECRET_KEY is required}
     ulimits:
       nofile:
         soft: 262144
@@ -57,6 +62,7 @@ services:
       - /srv/rawbbit-two/clickhouse/data:/var/lib/clickhouse
       - /srv/rawbbit-two/clickhouse/logs:/var/log/clickhouse-server
       - ./clickhouse/config.d/${CLICKHOUSE_CONFIG_PROFILE_FILE:-low-memory.xml}:/etc/clickhouse-server/config.d/resource-profile.xml:ro
+      - ./clickhouse/config.d/raw-s3-named-collection.xml:/etc/clickhouse-server/config.d/raw-s3-named-collection.xml:ro
       - ./clickhouse/users.d/${CLICKHOUSE_USERS_PROFILE_FILE:-low-memory-users.xml}:/etc/clickhouse-server/users.d/resource-profile-users.xml:ro
       - ./clickhouse/schema_analytics_events.sql:/docker-entrypoint-initdb.d/01_schema_analytics_events.sql:ro
       - ./clickhouse/initdb.d/02_service_users.sh:/docker-entrypoint-initdb.d/02_service_users.sh:ro
@@ -67,6 +73,42 @@ services:
       retries: 12
     networks:
       - web
+
+  dbt-runner:
+    image: ${DBT_RUNNER_IMAGE:-ghcr.io/mirlan-irokez/rawbbit-dbt-runner:0.1.1}
+    build:
+      context: ../../dbt_project
+      dockerfile: Dockerfile
+      args:
+        DBT_UID: ${DBT_RUNNER_UID:-1000}
+        DBT_GID: ${DBT_RUNNER_GID:-1000}
+    restart: unless-stopped
+    init: true
+    logging: *default-logging
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-analytics}
+      CLICKHOUSE_DBT_USER: ${CLICKHOUSE_DBT_USER:?CLICKHOUSE_DBT_USER is required}
+      CLICKHOUSE_DBT_PASSWORD: ${CLICKHOUSE_DBT_PASSWORD:?CLICKHOUSE_DBT_PASSWORD is required}
+      CLICKHOUSE_SECURE: "0"
+      CLICKHOUSE_VERIFY: "1"
+      DBT_THREADS: ${DBT_THREADS:-2}
+      DBT_CLICKHOUSE_MAX_THREADS: ${DBT_CLICKHOUSE_MAX_THREADS:-2}
+      RAWBBIT_RAW_LOAD_MODE: ${RAWBBIT_RAW_LOAD_MODE:-legacy}
+      RAWBBIT_DBT_HOURLY_LOOKBACK_HOURS: ${RAWBBIT_DBT_HOURLY_LOOKBACK_HOURS:-3}
+      RAWBBIT_DBT_DAILY_LOOKBACK_DAYS: ${RAWBBIT_DBT_DAILY_LOOKBACK_DAYS:-3}
+      RAWBBIT_DBT_BACKFILL_CHUNK_HOURS: ${RAWBBIT_DBT_BACKFILL_CHUNK_HOURS:-24}
+    volumes:
+      - /srv/rawbbit-two/dbt:/app/runtime
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - web
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
 
   mcp-server:
     image: ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2

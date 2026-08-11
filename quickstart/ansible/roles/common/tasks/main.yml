@@ -1,0 +1,81 @@
+---
+- name: Validate the target operating system
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == "Ubuntu"
+      - ansible_facts.distribution_major_version in ["22", "24"]
+    fail_msg: Rawbbit Ansible currently supports Ubuntu 22.04 and 24.04 only.
+
+- name: Validate the manually created deployment account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ rawbbit_deploy_user | default('deploy') }}"
+
+- name: Set the system timezone
+  community.general.timezone:
+    name: "{{ common_timezone }}"
+
+- name: Update apt metadata and safely upgrade installed packages
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    upgrade: safe
+  when: common_upgrade_packages | bool
+
+- name: Install common host utilities
+  ansible.builtin.apt:
+    name: "{{ common_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Allow administrative SSH before enabling UFW
+  community.general.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+    src: "{{ common_admin_cidr }}"
+  when:
+    - common_manage_ufw | bool
+    - common_admin_cidr | length > 0
+
+- name: Allow SSH from any source for dynamic-IP operators
+  community.general.ufw:
+    rule: allow
+    name: OpenSSH
+  when:
+    - common_manage_ufw | bool
+    - common_admin_cidr | length == 0
+
+- name: Allow public HTTP and HTTPS
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - "80"
+    - "443"
+  when: common_manage_ufw | bool
+
+- name: Set UFW incoming policy
+  community.general.ufw:
+    direction: incoming
+    policy: deny
+  when: common_manage_ufw | bool
+
+- name: Set UFW outgoing policy and enable the firewall
+  community.general.ufw:
+    direction: outgoing
+    policy: allow
+    state: enabled
+  when: common_manage_ufw | bool
+
+- name: Check whether Ubuntu requires a reboot
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: common_reboot_required
+
+- name: Report required reboot without performing it
+  ansible.builtin.debug:
+    msg: Ubuntu reports that a reboot is required. Reboot deliberately, then rerun the playbook.
+  when: common_reboot_required.stat.exists

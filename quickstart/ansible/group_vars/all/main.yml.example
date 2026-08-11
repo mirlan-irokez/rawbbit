@@ -1,0 +1,36 @@
+---
+# Copy to main.yml. Keep secrets in vault.yml, not here.
+rawbbit_deploy_user: deploy
+rawbbit_timezone: UTC
+# Stable operator IP: use a narrow CIDR such as 203.0.113.10/32.
+# Dynamic operator IP: set to "" to allow the broader OpenSSH UFW profile.
+rawbbit_admin_cidr: 203.0.113.10/32
+rawbbit_manage_ufw: true
+rawbbit_upgrade_packages: true
+rawbbit_validate_tls: true
+
+rawbbit_one_collector_hostname: collector.example.com
+rawbbit_one_s3_hostname: s3.example.com
+rawbbit_one_dozzle_hostname: logs-one.example.com
+rawbbit_one_dozzle_admin_username: admin
+rawbbit_one_dozzle_admin_email: admin@example.com
+rawbbit_one_dozzle_admin_name: Rawbbit Administrator
+rawbbit_one_dozzle_users_revision: 1
+rawbbit_one_s3_bucket: rawbbit_raw
+rawbbit_one_cors_allow_origins: ""
+rawbbit_one_geoip_enabled: false
+
+rawbbit_two_mcp_hostname: mcp.example.com
+rawbbit_two_metabase_hostname: metabase.example.com
+rawbbit_two_clickhouse_hostname: clickhouse.example.com
+rawbbit_two_dozzle_hostname: logs-two.example.com
+rawbbit_two_dozzle_admin_username: admin
+rawbbit_two_dozzle_admin_email: admin@example.com
+rawbbit_two_dozzle_admin_name: Rawbbit Administrator
+rawbbit_two_dozzle_users_revision: 1
+rawbbit_two_s3_endpoint: https://s3.example.com
+rawbbit_two_s3_bucket: rawbbit_raw
+rawbbit_two_s3_prefix: raw
+rawbbit_two_clickhouse_config_profile: low-memory.xml
+rawbbit_two_clickhouse_users_profile: low-memory-users.xml
+rawbbit_two_raw_load_mode: legacy

@@ -1,0 +1,27 @@
+---
+# Copy to vault.yml, replace every change_me value, then encrypt:
+# ansible-vault encrypt group_vars/all/vault.yml
+
+vault_rawbbit_one_collector_api_keys:
+  change_me_api_key: com.example.app
+vault_rawbbit_one_ip_hash_salt: change_me
+vault_rawbbit_one_s3_writer_access_key: change_me
+vault_rawbbit_one_s3_writer_secret_key: change_me
+vault_rawbbit_one_s3_reader_access_key: change_me
+vault_rawbbit_one_s3_reader_secret_key: change_me
+vault_rawbbit_one_s3_admin_access_key: change_me
+vault_rawbbit_one_s3_admin_secret_key: change_me
+vault_rawbbit_one_dozzle_password: change_me
+
+vault_rawbbit_two_clickhouse_admin_password: change_me
+vault_rawbbit_two_clickhouse_mcp_password: change_me
+vault_rawbbit_two_clickhouse_metabase_password: change_me
+vault_rawbbit_two_clickhouse_loader_password: change_me
+vault_rawbbit_two_clickhouse_dbt_password: change_me
+vault_rawbbit_two_mcp_api_keys:
+  operator: change_me
+vault_rawbbit_two_postgres_superuser_password: change_me
+vault_rawbbit_two_metabase_db_password: change_me
+vault_rawbbit_two_s3_reader_access_key: change_me
+vault_rawbbit_two_s3_reader_secret_key: change_me
+vault_rawbbit_two_dozzle_password: change_me

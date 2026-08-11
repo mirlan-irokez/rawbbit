@@ -7,6 +7,8 @@ Scope note:
 - this quickstart includes both supported raw-storage backends for local validation
 - S3-compatible storage such as SeaweedFS is the preferred OSS raw-storage path
 - if you want the optional BigQuery external-table path afterward, use GCS
+- for automated production-oriented deployment of VM one, VM two, or both,
+  use the [Ansible quickstart](../quickstart/ansible/README.md)
 
 ## Prerequisites
 
@@ -141,6 +143,8 @@ If the flow does not complete, check:
 
 - `architecture.md`
 - `configuration.md`
+- `../quickstart/ansible/README.md` for automated production-oriented VM deployment
+- `../quickstart/vm_rawbbit_one/README.md` for transparent manual ingestion VM deployment
 - `../clickhouse/README.md` for the main ClickHouse query/loading path
 - `../dbt_project/README.md` for scheduled ClickHouse ingestion and backfills
 - `../quickstart/vm_rawbbit_two/README.md` for the complete analytics VM deployment

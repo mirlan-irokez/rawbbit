@@ -1,0 +1,20 @@
+---
+rawbbit_one_install_dir: /home/deploy/rawbbit-one
+rawbbit_one_root: /srv/rawbbit-one
+rawbbit_one_collector_hostname: collector.example.com
+rawbbit_one_s3_hostname: s3.example.com
+rawbbit_one_dozzle_hostname: logs-one.example.com
+rawbbit_one_dozzle_admin_username: admin
+rawbbit_one_dozzle_admin_email: admin@example.com
+rawbbit_one_dozzle_admin_name: Rawbbit Administrator
+rawbbit_one_dozzle_users_revision: 1
+rawbbit_one_s3_bucket: rawbbit_raw
+rawbbit_one_s3_prefix: raw
+rawbbit_one_cors_allow_origins: ""
+rawbbit_one_geoip_enabled: false
+rawbbit_one_log_level: INFO
+rawbbit_one_nats_stream_max_age_seconds: 86400
+rawbbit_one_seaweed_volume_size_limit_mb: 5000
+rawbbit_one_seaweed_volume_max: 0
+rawbbit_one_seaweed_volume_min_free_space_gb: 5
+rawbbit_one_validate_tls: "{{ rawbbit_validate_tls | default(true) }}"

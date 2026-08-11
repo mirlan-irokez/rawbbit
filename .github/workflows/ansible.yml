@@ -1,0 +1,53 @@
+name: Validate Ansible quickstart
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ansible.yml"
+      - "quickstart/ansible/**"
+      - "quickstart/vm_rawbbit_one/**"
+      - "quickstart/vm_rawbbit_two/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/ansible.yml"
+      - "quickstart/ansible/**"
+      - "quickstart/vm_rawbbit_one/**"
+      - "quickstart/vm_rawbbit_two/**"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible validation tools
+        run: >-
+          python -m pip install
+          'ansible-core==2.19.11'
+          'ansible-lint==25.12.2'
+
+      - name: Install required Ansible collections
+        run: >-
+          ansible-galaxy collection install
+          -r quickstart/ansible/requirements.yml
+
+      - name: Run playbook syntax checks
+        working-directory: quickstart/ansible
+        run: |
+          ansible-playbook -i inventory.example.yml vm_one.yml --syntax-check
+          ansible-playbook -i inventory.example.yml vm_two.yml --syntax-check
+          ansible-playbook -i inventory.example.yml site.yml --syntax-check
+
+      - name: Run ansible-lint
+        run: ansible-lint quickstart/ansible

@@ -13,7 +13,6 @@ services:
         max-file: "5"
     environment:
       DOZZLE_AUTH_PROVIDER: simple
-      DOZZLE_AUTH_TTL: ${DOZZLE_AUTH_TTL:-48h}
       DOZZLE_ENABLE_MCP: "true"
       DOZZLE_HOSTNAME: rawbbit-two
     expose:

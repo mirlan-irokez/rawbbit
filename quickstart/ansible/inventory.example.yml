@@ -1,0 +1,13 @@
+---
+all:
+  children:
+    rawbbit_one:
+      hosts:
+        ingestion:
+          ansible_host: 192.0.2.10
+    rawbbit_two:
+      hosts:
+        analytics:
+          ansible_host: 192.0.2.20
+  vars:
+    ansible_user: deploy

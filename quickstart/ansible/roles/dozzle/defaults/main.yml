@@ -1,0 +1,8 @@
+---
+dozzle_image: amir20/dozzle:v10.6.13
+dozzle_admin_username: admin
+dozzle_admin_email: admin@example.com
+dozzle_admin_name: Rawbbit Administrator
+dozzle_password: ""
+dozzle_users_revision: 1
+dozzle_root: ""

@@ -1,0 +1,143 @@
+---
+- name: Require key-based deployment access before SSH hardening
+  ansible.builtin.assert:
+    that:
+      - ansible_user == (rawbbit_deploy_user | default('deploy'))
+      - ansible_password is not defined
+    fail_msg: Connect as the manually prepared deploy user with an SSH key before hardening SSH.
+
+- name: Read the original SSH server configuration
+  ansible.builtin.slurp:
+    src: "{{ ssh_hardening_main_config }}"
+  register: ssh_hardening_main_original
+
+- name: Check for an existing Rawbbit SSH drop-in
+  ansible.builtin.stat:
+    path: "{{ ssh_hardening_dropin }}"
+  register: ssh_hardening_dropin_stat
+
+- name: Read the existing Rawbbit SSH drop-in
+  ansible.builtin.slurp:
+    src: "{{ ssh_hardening_dropin }}"
+  register: ssh_hardening_dropin_original
+  when: ssh_hardening_dropin_stat.stat.exists
+
+- name: Apply and validate Rawbbit SSH hardening
+  block:
+    - name: Remove duplicate global drop-in include declarations
+      ansible.builtin.replace:
+        path: "{{ ssh_hardening_main_config }}"
+        regexp: '(?m)^(?!\A)\s*Include\s+/etc/ssh/sshd_config\.d/\*\.conf\s*\n?'
+        replace: ""
+      register: ssh_hardening_include_removed
+
+    - name: Load SSH drop-ins before other global declarations
+      ansible.builtin.lineinfile:
+        path: "{{ ssh_hardening_main_config }}"
+        line: Include /etc/ssh/sshd_config.d/*.conf
+        insertbefore: BOF
+        backup: true
+      register: ssh_hardening_include_added
+
+    - name: Remove conflicting authentication policy from the main SSH file
+      ansible.builtin.replace:
+        path: "{{ ssh_hardening_main_config }}"
+        regexp: "(?mi)^\\s*{{ item.setting }}\\s+(?!{{ item.allowed }}(?:[ \\t]*(?:#.*)?)?$)\\S+.*\\n?"
+        replace: ""
+        backup: true
+      loop:
+        - setting: PasswordAuthentication
+          allowed: "no"
+        - setting: KbdInteractiveAuthentication
+          allowed: "no"
+        - setting: PubkeyAuthentication
+          allowed: "yes"
+        - setting: PermitRootLogin
+          allowed: "(?:prohibit-password|without-password)"
+      register: ssh_hardening_conflicts_removed
+
+    - name: Set the Rawbbit authentication policy in the main SSH file
+      ansible.builtin.blockinfile:
+        path: "{{ ssh_hardening_main_config }}"
+        marker: "# {mark} RAWBBIT MANAGED SSH POLICY"
+        insertbefore: '^Match\s'
+        block: |
+          PasswordAuthentication no
+          PubkeyAuthentication yes
+          PermitRootLogin prohibit-password
+        backup: true
+      register: ssh_hardening_main_policy
+
+    - name: Install the early Rawbbit SSH hardening policy
+      ansible.builtin.copy:
+        dest: "{{ ssh_hardening_dropin }}"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Managed by Rawbbit Ansible.
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PubkeyAuthentication yes
+          PermitRootLogin prohibit-password
+      register: ssh_hardening_dropin_installed
+
+    - name: Validate the complete SSH server configuration
+      ansible.builtin.command: /usr/sbin/sshd -t
+      changed_when: false
+
+    - name: Read the effective SSH server configuration
+      ansible.builtin.command: /usr/sbin/sshd -T
+      changed_when: false
+      register: ssh_hardening_effective
+
+    - name: Assert effective SSH authentication policy
+      ansible.builtin.assert:
+        that:
+          - "'passwordauthentication no' in ssh_hardening_effective.stdout"
+          - "'kbdinteractiveauthentication no' in ssh_hardening_effective.stdout"
+          - "'pubkeyauthentication yes' in ssh_hardening_effective.stdout"
+          - "'permitrootlogin without-password' in ssh_hardening_effective.stdout or 'permitrootlogin prohibit-password' in ssh_hardening_effective.stdout"
+
+    - name: Reload the validated SSH service
+      ansible.builtin.service:
+        name: ssh
+        state: reloaded
+      when: >-
+        ssh_hardening_include_removed.changed
+        or ssh_hardening_include_added.changed
+        or ssh_hardening_conflicts_removed.changed
+        or ssh_hardening_main_policy.changed
+        or ssh_hardening_dropin_installed.changed
+
+    - name: Confirm the deployment account remains usable
+      ansible.builtin.command: /usr/bin/true
+      become: false
+      changed_when: false
+  rescue:
+    - name: Restore the original SSH server configuration
+      ansible.builtin.copy:
+        dest: "{{ ssh_hardening_main_config }}"
+        content: "{{ ssh_hardening_main_original.content | b64decode }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Restore the original Rawbbit SSH drop-in
+      ansible.builtin.copy:
+        dest: "{{ ssh_hardening_dropin }}"
+        content: "{{ ssh_hardening_dropin_original.content | b64decode }}"
+        owner: root
+        group: root
+        mode: "0644"
+      when: ssh_hardening_dropin_stat.stat.exists
+
+    - name: Remove the newly created invalid SSH drop-in
+      ansible.builtin.file:
+        path: "{{ ssh_hardening_dropin }}"
+        state: absent
+      when: not ssh_hardening_dropin_stat.stat.exists
+
+    - name: Stop after restoring the original SSH configuration
+      ansible.builtin.fail:
+        msg: SSH hardening validation failed. Original configuration restored; SSH was not reloaded.

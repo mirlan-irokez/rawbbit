@@ -1,0 +1,206 @@
+---
+- name: Validate VM-one public configuration
+  ansible.builtin.assert:
+    that:
+      - rawbbit_one_collector_hostname != "collector.example.com"
+      - rawbbit_one_s3_hostname != "s3.example.com"
+      - rawbbit_one_dozzle_hostname != "logs-one.example.com"
+      - rawbbit_one_dozzle_hostname not in [rawbbit_one_collector_hostname, rawbbit_one_s3_hostname]
+      - vault_rawbbit_one_ip_hash_salt != "change_me"
+      - vault_rawbbit_one_s3_writer_access_key != "change_me"
+      - vault_rawbbit_one_s3_writer_secret_key != "change_me"
+      - vault_rawbbit_one_s3_reader_access_key != "change_me"
+      - vault_rawbbit_one_s3_reader_secret_key != "change_me"
+      - vault_rawbbit_one_s3_admin_access_key != "change_me"
+      - vault_rawbbit_one_s3_admin_secret_key != "change_me"
+      - vault_rawbbit_one_collector_api_keys | length > 0
+      - "'change_me_api_key' not in vault_rawbbit_one_collector_api_keys"
+    fail_msg: Replace all VM-one example hostnames and Vault placeholders.
+  no_log: true
+
+- name: Create VM-one installation directory
+  ansible.builtin.file:
+    path: "{{ rawbbit_one_install_dir }}"
+    state: directory
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "0755"
+
+- name: Copy tracked VM-one quickstart artifacts
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../vm_rawbbit_one/"
+    dest: "{{ rawbbit_one_install_dir }}/"
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: preserve
+    directory_mode: "0755"
+
+- name: Render private VM-one environment
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ rawbbit_one_install_dir }}/.env"
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "0600"
+  no_log: true
+
+- name: Render private SeaweedFS S3 identities
+  ansible.builtin.template:
+    src: s3.json.j2
+    dest: "{{ rawbbit_one_install_dir }}/seaweedfs/s3.json"
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "0600"
+  no_log: true
+
+- name: Render VM-one Caddy routes including Dozzle
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: "{{ rawbbit_one_install_dir }}/Caddyfile"
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "0644"
+
+- name: Create persistent VM-one host directories
+  ansible.builtin.command: ./bootstrap-host-dirs.sh
+  args:
+    chdir: "{{ rawbbit_one_install_dir }}"
+  environment:
+    RAWBBIT_ONE_ROOT: "{{ rawbbit_one_root }}"
+  changed_when: false
+
+- name: Configure authenticated Dozzle for VM one
+  ansible.builtin.include_role:
+    name: dozzle
+  vars:
+    dozzle_root: "{{ rawbbit_one_root }}/dozzle"
+    dozzle_admin_username: "{{ rawbbit_one_dozzle_admin_username }}"
+    dozzle_admin_email: "{{ rawbbit_one_dozzle_admin_email }}"
+    dozzle_admin_name: "{{ rawbbit_one_dozzle_admin_name }}"
+    dozzle_password: "{{ vault_rawbbit_one_dozzle_password }}"
+    dozzle_users_revision: "{{ rawbbit_one_dozzle_users_revision }}"
+
+- name: Validate VM-one Compose configuration with Dozzle
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - docker-compose.yml
+      - -f
+      - docker-compose.dozzle.yml
+      - config
+      - --quiet
+  args:
+    chdir: "{{ rawbbit_one_install_dir }}"
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Pull and start VM-one services with Dozzle
+  community.docker.docker_compose_v2:
+    project_src: "{{ rawbbit_one_install_dir }}"
+    files:
+      - docker-compose.yml
+      - docker-compose.dozzle.yml
+    build: never
+    pull: always
+    state: present
+    wait: true
+    wait_timeout: 300
+  become: false
+  no_log: true
+
+- name: Wait for collector HTTPS health
+  ansible.builtin.uri:
+    url: "https://{{ rawbbit_one_collector_hostname }}/healthz"
+    status_code: 200
+    validate_certs: "{{ rawbbit_one_validate_tls }}"
+  register: rawbbit_one_collector_health
+  retries: 12
+  delay: 10
+  until: rawbbit_one_collector_health.status == 200
+
+- name: Wait for public SeaweedFS S3 endpoint
+  ansible.builtin.uri:
+    url: "https://{{ rawbbit_one_s3_hostname }}/"
+    status_code:
+      - 200
+      - 403
+    validate_certs: "{{ rawbbit_one_validate_tls }}"
+  register: rawbbit_one_s3_health
+  retries: 12
+  delay: 10
+  until: rawbbit_one_s3_health.status in [200, 403]
+
+- name: Check whether the raw S3 bucket exists
+  ansible.builtin.command:
+    argv:
+      - aws
+      - s3api
+      - head-bucket
+      - --bucket
+      - "{{ rawbbit_one_s3_bucket }}"
+      - --endpoint-url
+      - "https://{{ rawbbit_one_s3_hostname }}"
+  environment:
+    AWS_ACCESS_KEY_ID: "{{ vault_rawbbit_one_s3_admin_access_key }}"
+    AWS_SECRET_ACCESS_KEY: "{{ vault_rawbbit_one_s3_admin_secret_key }}"
+    AWS_DEFAULT_REGION: us-east-1
+  register: rawbbit_one_bucket_check
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Create the raw S3 bucket when absent
+  ansible.builtin.command:
+    argv:
+      - aws
+      - s3api
+      - create-bucket
+      - --bucket
+      - "{{ rawbbit_one_s3_bucket }}"
+      - --endpoint-url
+      - "https://{{ rawbbit_one_s3_hostname }}"
+  environment:
+    AWS_ACCESS_KEY_ID: "{{ vault_rawbbit_one_s3_admin_access_key }}"
+    AWS_SECRET_ACCESS_KEY: "{{ vault_rawbbit_one_s3_admin_secret_key }}"
+    AWS_DEFAULT_REGION: us-east-1
+  when: rawbbit_one_bucket_check.rc != 0
+  changed_when: true
+  no_log: true
+
+- name: Inspect the NATS EVENTS stream
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - --network
+      - rawbbit-one_default
+      - natsio/nats-box:latest
+      - nats
+      - --server
+      - nats://nats:4222
+      - stream
+      - info
+      - EVENTS
+  become: false
+  changed_when: false
+  register: rawbbit_one_nats_stream
+
+- name: Verify the configured NATS stream retention
+  ansible.builtin.assert:
+    that:
+      - "'24h0m0s' in rawbbit_one_nats_stream.stdout"
+    fail_msg: The EVENTS stream does not report the expected 24-hour maximum age.
+
+- name: Verify authenticated Dozzle endpoint is reachable
+  ansible.builtin.uri:
+    url: "https://{{ rawbbit_one_dozzle_hostname }}/"
+    status_code: 200
+    validate_certs: "{{ rawbbit_one_validate_tls }}"
+  register: rawbbit_one_dozzle_health
+  retries: 12
+  delay: 10
+  until: rawbbit_one_dozzle_health.status == 200

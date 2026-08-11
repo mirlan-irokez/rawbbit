@@ -1,0 +1,108 @@
+---
+- name: Validate Dozzle authentication configuration
+  ansible.builtin.assert:
+    that:
+      - dozzle_root | length > 0
+      - dozzle_password | length >= 12
+      - dozzle_password != "change_me"
+      - "'\n' not in dozzle_password"
+      - "'\r' not in dozzle_password"
+      - dozzle_users_revision | int > 0
+    fail_msg: Configure a Dozzle password of at least 12 characters in Ansible Vault.
+  no_log: true
+
+- name: Create persistent Dozzle data directory
+  ansible.builtin.file:
+    path: "{{ dozzle_root }}"
+    state: directory
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "0755"
+
+- name: Check for an existing Dozzle users file
+  ansible.builtin.stat:
+    path: "{{ dozzle_root }}/users.yml"
+  register: dozzle_users_file
+
+- name: Check for the Rawbbit Dozzle users revision
+  ansible.builtin.stat:
+    path: "{{ dozzle_root }}/.rawbbit-users-revision"
+  register: dozzle_users_revision_file
+
+- name: Read the Rawbbit Dozzle users revision
+  ansible.builtin.slurp:
+    src: "{{ dozzle_root }}/.rawbbit-users-revision"
+  register: dozzle_users_revision_content
+  when: dozzle_users_revision_file.stat.exists
+
+- name: Decide whether to regenerate Dozzle users
+  ansible.builtin.set_fact:
+    dozzle_regenerate_users: >-
+      {{
+        not dozzle_users_file.stat.exists
+        or not dozzle_users_revision_file.stat.exists
+        or (dozzle_users_revision_content.content | default('') | b64decode | trim)
+          != (dozzle_users_revision | string)
+      }}
+
+- name: Generate the authenticated Dozzle users document
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - -i
+      - --rm
+      - "{{ dozzle_image }}"
+      - generate
+      - "{{ dozzle_admin_username }}"
+      - --email
+      - "{{ dozzle_admin_email }}"
+      - --name
+      - "{{ dozzle_admin_name }}"
+      - --user-roles
+      - none
+    stdin: "{{ dozzle_password }}\n"
+    stdin_add_newline: false
+  become: false
+  changed_when: true
+  register: dozzle_generated_users
+  when: dozzle_regenerate_users | bool
+  no_log: true
+
+- name: Validate the generated Dozzle users document
+  ansible.builtin.assert:
+    that:
+      - (dozzle_generated_users.stdout | from_yaml).users is defined
+      - dozzle_admin_username in (dozzle_generated_users.stdout | from_yaml).users
+      - (dozzle_generated_users.stdout | from_yaml).users[dozzle_admin_username].password | length > 20
+      - (dozzle_generated_users.stdout | from_yaml).users[dozzle_admin_username].roles == "none"
+    fail_msg: The Dozzle generator returned an invalid users document.
+  when: dozzle_regenerate_users | bool
+  no_log: true
+
+- name: Install the generated Dozzle users document
+  ansible.builtin.copy:
+    content: "{{ dozzle_generated_users.stdout | default('') }}\n"
+    dest: "{{ dozzle_root }}/users.yml"
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "0600"
+  when: dozzle_regenerate_users | bool
+  no_log: true
+
+- name: Record the Rawbbit Dozzle users revision
+  ansible.builtin.copy:
+    content: "{{ dozzle_users_revision }}\n"
+    dest: "{{ dozzle_root }}/.rawbbit-users-revision"
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "0600"
+  when: dozzle_regenerate_users | bool
+
+- name: Enforce permissions on the Dozzle users document
+  ansible.builtin.file:
+    path: "{{ dozzle_root }}/users.yml"
+    state: file
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "0600"

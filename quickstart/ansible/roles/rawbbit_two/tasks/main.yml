@@ -1,0 +1,247 @@
+---
+- name: Validate VM-two public configuration
+  ansible.builtin.assert:
+    that:
+      - rawbbit_two_mcp_hostname != "mcp.example.com"
+      - rawbbit_two_metabase_hostname != "metabase.example.com"
+      - rawbbit_two_clickhouse_hostname != "clickhouse.example.com"
+      - rawbbit_two_dozzle_hostname != "logs-two.example.com"
+      - rawbbit_two_dozzle_hostname not in [rawbbit_two_mcp_hostname, rawbbit_two_metabase_hostname, rawbbit_two_clickhouse_hostname]
+      - rawbbit_two_s3_endpoint != "https://s3.example.com"
+      - rawbbit_two_raw_load_mode in ["legacy", "dbt"]
+      - vault_rawbbit_two_clickhouse_admin_password != "change_me"
+      - vault_rawbbit_two_clickhouse_mcp_password != "change_me"
+      - vault_rawbbit_two_clickhouse_metabase_password != "change_me"
+      - vault_rawbbit_two_clickhouse_loader_password != "change_me"
+      - vault_rawbbit_two_clickhouse_dbt_password != "change_me"
+      - vault_rawbbit_two_postgres_superuser_password != "change_me"
+      - vault_rawbbit_two_metabase_db_password != "change_me"
+      - vault_rawbbit_two_s3_reader_access_key != "change_me"
+      - vault_rawbbit_two_s3_reader_secret_key != "change_me"
+      - vault_rawbbit_two_mcp_api_keys | length > 0
+      - "'change_me' not in (vault_rawbbit_two_mcp_api_keys | dict2items | map(attribute='value') | list)"
+    fail_msg: Replace all VM-two example hostnames and Vault placeholders.
+  no_log: true
+
+- name: Read deployment account numeric ID
+  ansible.builtin.command: "id -u {{ rawbbit_deploy_user }}"
+  changed_when: false
+  register: rawbbit_two_deploy_uid
+
+- name: Read deployment account group ID
+  ansible.builtin.command: "id -g {{ rawbbit_deploy_user }}"
+  changed_when: false
+  register: rawbbit_two_deploy_gid
+
+- name: Require UID/GID 1000 for the public dbt-runner image
+  ansible.builtin.assert:
+    that:
+      - rawbbit_two_deploy_uid.stdout == "1000"
+      - rawbbit_two_deploy_gid.stdout == "1000"
+    fail_msg: >-
+      The public dbt-runner image runs as 1000:1000. Use a deploy account with
+      UID/GID 1000 or provide a custom image built for this host.
+  when: rawbbit_two_dbt_runner_image != "rawbbit-dbt-runner:local"
+
+- name: Verify the configured raw S3 endpoint before deploying VM two
+  ansible.builtin.uri:
+    url: "{{ rawbbit_two_s3_endpoint | regex_replace('/+$', '') }}/"
+    status_code:
+      - 200
+      - 403
+    validate_certs: "{{ rawbbit_two_validate_tls }}"
+  register: rawbbit_two_s3_health
+  retries: 6
+  delay: 10
+  until: rawbbit_two_s3_health.status in [200, 403]
+
+- name: Create VM-two installation directory
+  ansible.builtin.file:
+    path: "{{ rawbbit_two_install_dir }}"
+    state: directory
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "0755"
+
+- name: Copy tracked VM-two quickstart artifacts
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../vm_rawbbit_two/"
+    dest: "{{ rawbbit_two_install_dir }}/"
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: preserve
+    directory_mode: "0755"
+
+- name: Render private VM-two environment
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ rawbbit_two_install_dir }}/.env"
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "0600"
+  no_log: true
+
+- name: Render VM-two Caddy routes including Dozzle
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: "{{ rawbbit_two_install_dir }}/Caddyfile"
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "0644"
+
+- name: Create persistent VM-two host directories
+  ansible.builtin.command: ./bootstrap-host-dirs.sh
+  args:
+    chdir: "{{ rawbbit_two_install_dir }}"
+  environment:
+    RAWBBIT_TWO_ROOT: "{{ rawbbit_two_root }}"
+    RAWBBIT_TWO_RUNTIME_OWNER: "{{ rawbbit_deploy_user }}"
+  changed_when: false
+
+- name: Configure authenticated Dozzle for VM two
+  ansible.builtin.include_role:
+    name: dozzle
+  vars:
+    dozzle_root: "{{ rawbbit_two_root }}/dozzle"
+    dozzle_admin_username: "{{ rawbbit_two_dozzle_admin_username }}"
+    dozzle_admin_email: "{{ rawbbit_two_dozzle_admin_email }}"
+    dozzle_admin_name: "{{ rawbbit_two_dozzle_admin_name }}"
+    dozzle_password: "{{ vault_rawbbit_two_dozzle_password }}"
+    dozzle_users_revision: "{{ rawbbit_two_dozzle_users_revision }}"
+
+- name: Validate VM-two Compose configuration with Dozzle
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - docker-compose.yml
+      - -f
+      - docker-compose.dozzle.yml
+      - config
+      - --quiet
+  args:
+    chdir: "{{ rawbbit_two_install_dir }}"
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Pull and start VM-two services with Dozzle
+  community.docker.docker_compose_v2:
+    project_src: "{{ rawbbit_two_install_dir }}"
+    files:
+      - docker-compose.yml
+      - docker-compose.dozzle.yml
+    build: never
+    pull: always
+    state: present
+    wait: true
+    wait_timeout: 600
+  become: false
+  no_log: true
+
+- name: Install legacy hourly loader only in legacy mode
+  ansible.builtin.command: ./install-hourly-loader-cron.sh
+  args:
+    chdir: "{{ rawbbit_two_install_dir }}"
+  become: false
+  changed_when: false
+  when: rawbbit_two_raw_load_mode == "legacy"
+
+- name: Wait for local ClickHouse health
+  ansible.builtin.uri:
+    url: http://127.0.0.1:8123/ping
+    return_content: true
+    status_code: 200
+  register: rawbbit_two_clickhouse_health
+  retries: 18
+  delay: 10
+  until:
+    - rawbbit_two_clickhouse_health.status == 200
+    - rawbbit_two_clickhouse_health.content | trim == "Ok."
+
+- name: Wait for Metabase HTTPS route
+  ansible.builtin.uri:
+    url: "https://{{ rawbbit_two_metabase_hostname }}/"
+    status_code:
+      - 200
+      - 302
+    validate_certs: "{{ rawbbit_two_validate_tls }}"
+  register: rawbbit_two_metabase_health
+  retries: 24
+  delay: 10
+  until: rawbbit_two_metabase_health.status in [200, 302]
+
+- name: Verify authenticated Rawbbit MCP initialization
+  ansible.builtin.uri:
+    url: "https://{{ rawbbit_two_mcp_hostname }}/mcp"
+    method: POST
+    headers:
+      Authorization: >-
+        Bearer {{ (vault_rawbbit_two_mcp_api_keys | dict2items | first).value }}
+      Accept: application/json, text/event-stream
+      Content-Type: application/json
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      id: 1
+      method: initialize
+      params:
+        protocolVersion: "2025-03-26"
+        capabilities: {}
+        clientInfo:
+          name: ansible-healthcheck
+          version: "1.0"
+    status_code: 200
+    validate_certs: "{{ rawbbit_two_validate_tls }}"
+  no_log: true
+
+- name: Verify dbt connection
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - exec
+      - -T
+      - dbt-runner
+      - dbt
+      - debug
+      - --project-dir
+      - /app
+      - --profiles-dir
+      - /app
+  args:
+    chdir: "{{ rawbbit_two_install_dir }}"
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Verify dbt project parsing
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - exec
+      - -T
+      - dbt-runner
+      - dbt
+      - parse
+      - --project-dir
+      - /app
+      - --profiles-dir
+      - /app
+  args:
+    chdir: "{{ rawbbit_two_install_dir }}"
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Verify authenticated Dozzle endpoint is reachable
+  ansible.builtin.uri:
+    url: "https://{{ rawbbit_two_dozzle_hostname }}/"
+    status_code: 200
+    validate_certs: "{{ rawbbit_two_validate_tls }}"
+  register: rawbbit_two_dozzle_health
+  retries: 12
+  delay: 10
+  until: rawbbit_two_dozzle_health.status == 200

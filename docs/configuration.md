@@ -4,6 +4,25 @@ The canonical environment-variable reference for the public stack is `backend/de
 
 This guide groups the main settings by responsibility.
 
+## Ansible deployment configuration
+
+The environment variables below remain the runtime contract. The automated
+deployment path renders them from operator inputs instead of requiring manual
+`.env` editing on each VM:
+
+- `quickstart/ansible/inventory.yml` defines target hosts and the SSH user
+- `quickstart/ansible/group_vars/all/main.yml` defines non-secret desired state,
+  including public hostnames, firewall policy, resource profiles, and deployment
+  choices
+- `quickstart/ansible/group_vars/all/vault.yml` is encrypted and defines API
+  keys, passwords, salts, and object-storage credentials
+
+Create those files from their tracked `.example` templates. They remain on the
+Ansible workstation; the playbooks render only the required private runtime
+files on each VM. See the
+[Ansible quickstart](../quickstart/ansible/README.md) for setup, encryption,
+independent VM deployment, and recovery instructions.
+
 ## NATS and stream settings
 
 Main variables:

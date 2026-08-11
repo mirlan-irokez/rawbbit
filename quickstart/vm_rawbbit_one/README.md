@@ -7,6 +7,11 @@ Scope: Docker Compose on one Ubuntu 22.04 or 24.04 VM
 This guide is provider-neutral. It assumes a fresh Linux VM with a public IP,
 DNS control, and SSH access from a workstation.
 
+This document remains the transparent manual installation and troubleshooting
+path. For automated host preparation and deployment, including authenticated
+Dozzle, use [`../ansible/README.md`](../ansible/README.md). The Ansible path can
+deploy VM one independently.
+
 This quickstart runs:
 
 - Caddy
@@ -353,28 +358,39 @@ Meaning:
 
 Ensure there are no contradictory active declarations later in the file.
 
-4. Check configuration snippets.
-
-Ubuntu may also have configuration files under:
+4. Create the early-loading Rawbbit policy:
 
 ```bash
-/etc/ssh/sshd_config.d/
+sudo nano /etc/ssh/sshd_config.d/00-rawbbit-hardening.conf
 ```
 
-Inspect effective settings:
+Add:
+
+```text
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+PermitRootLogin prohibit-password
+```
+
+`KbdInteractiveAuthentication no` also disables password-like PAM prompts
+through SSH keyboard-interactive authentication. Ubuntu may load additional
+configuration from `/etc/ssh/sshd_config.d/`, so the main file and this
+early-loading policy must agree.
+
+Inspect the effective settings:
 
 ```bash
-sudo sshd -T | grep -E 'passwordauthentication|pubkeyauthentication|permitrootlogin'
+sudo sshd -T | grep -E 'passwordauthentication|kbdinteractiveauthentication|pubkeyauthentication|permitrootlogin'
 ```
 
 Expected result:
 
 - `passwordauthentication no`
+- `kbdinteractiveauthentication no`
 - `pubkeyauthentication yes`
-- `permitrootlogin prohibit-password`
-
-If a file under `/etc/ssh/sshd_config.d/` overrides your settings, update or
-remove the conflicting declaration deliberately.
+- `permitrootlogin prohibit-password` or its equivalent output alias,
+  `permitrootlogin without-password`
 
 5. Validate before applying:
 
@@ -573,7 +589,6 @@ S3_PUBLIC_HOSTNAME=s3.yourdomain.com
 
 # Optional; used only if Dozzle is enabled later.
 DOZZLE_PUBLIC_HOSTNAME=logs.yourdomain.com
-DOZZLE_AUTH_TTL=48h
 
 COLLECTOR_API_KEYS_JSON={"YOUR_API_KEY":"your.app.id"}
 IP_HASH_SALT=YOUR_RANDOM_SALT
@@ -583,6 +598,10 @@ S3_ACCESS_KEY=YOUR_WRITER_ACCESS_KEY
 S3_SECRET_KEY=YOUR_WRITER_SECRET_KEY
 RAW_STORAGE_BACKEND=s3
 ```
+
+Dozzle uses a browser-session cookie by default, so its login expires when the
+browser closes. Leave `DOZZLE_AUTH_TTL` unset unless you deliberately want a
+persistent login.
 
 Use the public Caddy hostname for external S3 access:
 

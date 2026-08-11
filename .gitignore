@@ -45,3 +45,11 @@ dbt_project/.user.yml
 *.duckdb
 *.sqlite
 *.sqlite3
+
+# ----------------------------
+# Ansible secrets
+# ----------------------------
+quickstart/ansible/inventory.yml
+quickstart/ansible/group_vars/all/main.yml
+quickstart/ansible/group_vars/all/vault.yml
+quickstart/ansible/.vault-pass

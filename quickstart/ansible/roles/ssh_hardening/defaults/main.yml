@@ -1,0 +1,3 @@
+---
+ssh_hardening_main_config: /etc/ssh/sshd_config
+ssh_hardening_dropin: /etc/ssh/sshd_config.d/00-rawbbit-hardening.conf

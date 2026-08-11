@@ -91,6 +91,12 @@ For the deeper architecture note, see [`docs/architecture.md`](docs/architecture
 
 ## Quickstart
 
+For automated provider-neutral deployment of either VM or both, see
+[`quickstart/ansible/README.md`](quickstart/ansible/README.md). The Ansible path
+keeps SSH-key and `deploy` account creation manual, then configures the hosts,
+installs Docker and authenticated Dozzle, renders Vault-backed private
+configuration, starts Compose, and runs health checks.
+
 For the recommended provider-neutral ingestion VM deployment guide, see
 [`quickstart/vm_rawbbit_one/README.md`](quickstart/vm_rawbbit_one/README.md).
 It deploys Caddy, NATS JetStream, collector-api, raw-writer, and SeaweedFS with
@@ -200,6 +206,7 @@ The included [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) model is inten
 ## Documentation
 
 - [`docs/architecture.md`](docs/architecture.md)
+- [`quickstart/ansible/README.md`](quickstart/ansible/README.md)
 - [`quickstart/vm_rawbbit_one/README.md`](quickstart/vm_rawbbit_one/README.md)
 - [`quickstart/vm_rawbbit_two/README.md`](quickstart/vm_rawbbit_two/README.md)
 - [`docs/quickstart.md`](docs/quickstart.md)

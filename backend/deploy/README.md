@@ -1,6 +1,10 @@
 # Deploy
 
-The `backend/deploy/` folder contains the reference scaffolding for running the public Rawbbit stack in local or simple self-hosted environments.
+The `backend/deploy/` folder contains reference scaffolding for running the
+public Rawbbit ingestion stack locally or in a simple self-hosted environment.
+For production-oriented automated deployment with host preparation, SSH/UFW
+hardening, Docker, Vault-backed secrets, authenticated Dozzle, and health
+checks, use the [Ansible quickstart](../../quickstart/ansible/README.md).
 
 ## What is here
 
@@ -25,7 +29,9 @@ The reference deployment brings up the ingestion path:
 Producer -> Collector API -> NATS JetStream -> Raw Writer -> Parquet in object storage
 ```
 
-It is intended as the operator path for the current open-source release.
+It is the transparent local/reference path for the current open-source release.
+The Ansible quickstart is the repeatable operator path for the complete VM-one
+deployment or the two-VM architecture.
 
 ## Public images
 
@@ -48,6 +54,8 @@ Runtime configuration still comes from `.env` or secret management. Do not bake 
 
 ## Related docs
 
+- `../../quickstart/ansible/README.md`
+- `../../quickstart/vm_rawbbit_one/README.md`
 - `../../docs/quickstart.md`
 - `../../docs/configuration.md`
 - `../../docs/architecture.md`

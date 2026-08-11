@@ -1,0 +1,19 @@
+{
+  "identities": [
+    {
+      "name": "rawbbit-writer",
+      "credentials": [{"accessKey": {{ vault_rawbbit_one_s3_writer_access_key | to_json }}, "secretKey": {{ vault_rawbbit_one_s3_writer_secret_key | to_json }}}],
+      "actions": ["Read", "List", "Write"]
+    },
+    {
+      "name": "rawbbit-reader",
+      "credentials": [{"accessKey": {{ vault_rawbbit_one_s3_reader_access_key | to_json }}, "secretKey": {{ vault_rawbbit_one_s3_reader_secret_key | to_json }}}],
+      "actions": ["Read", "List"]
+    },
+    {
+      "name": "rawbbit-admin",
+      "credentials": [{"accessKey": {{ vault_rawbbit_one_s3_admin_access_key | to_json }}, "secretKey": {{ vault_rawbbit_one_s3_admin_secret_key | to_json }}}],
+      "actions": ["Admin", "Read", "List", "Tagging", "Write"]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+---
+common_timezone: "{{ rawbbit_timezone | default('UTC') }}"
+common_admin_cidr: "{{ rawbbit_admin_cidr | default('') }}"
+common_manage_ufw: "{{ rawbbit_manage_ufw | default(true) }}"
+common_upgrade_packages: "{{ rawbbit_upgrade_packages | default(true) }}"
+common_packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - ufw
+  - openssl
+  - htop
+  - jq
+  - nano
+  - dnsutils
+  - rsync
+  - unzip
+  - cron
+  - awscli

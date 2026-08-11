@@ -1,0 +1,6 @@
+---
+- name: Deploy Rawbbit ingestion VM
+  ansible.builtin.import_playbook: vm_one.yml
+
+- name: Deploy Rawbbit analytics VM
+  ansible.builtin.import_playbook: vm_two.yml

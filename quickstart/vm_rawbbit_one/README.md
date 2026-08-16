@@ -162,10 +162,33 @@ apt install -y \
   jq \
   nano \
   dnsutils \
-  rsync \
-  awscli
+  rsync
 
 timedatectl set-timezone UTC
+```
+
+AWS CLI is not required to prepare the host, but it is useful later for
+creating and testing the SeaweedFS bucket:
+
+```bash
+sudo apt update
+sudo apt install -y curl unzip
+
+tmpdir="$(mktemp -d)"
+arch="$(uname -m)"
+case "$arch" in
+  x86_64) aws_arch="x86_64" ;;
+  aarch64|arm64) aws_arch="aarch64" ;;
+  *) echo "Unsupported architecture: ${arch}" >&2; exit 1 ;;
+esac
+
+curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${aws_arch}.zip" \
+  -o "${tmpdir}/awscliv2.zip"
+unzip -q "${tmpdir}/awscliv2.zip" -d "${tmpdir}"
+sudo "${tmpdir}/aws/install" --update
+rm -rf "${tmpdir}"
+
+aws --version
 ```
 
 Package roles:

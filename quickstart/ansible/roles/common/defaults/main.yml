@@ -16,4 +16,3 @@ common_packages:
   - rsync
   - unzip
   - cron
-  - awscli

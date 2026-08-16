@@ -18,6 +18,79 @@
     fail_msg: Replace all VM-one example hostnames and Vault placeholders.
   no_log: true
 
+- name: Select the AWS CLI architecture
+  ansible.builtin.set_fact:
+    rawbbit_one_aws_cli_arch: >-
+          {{
+            {
+              'x86_64': 'x86_64',
+              'aarch64': 'aarch64'
+            }.get(ansible_architecture, '')
+          }}
+
+- name: Validate AWS CLI architecture support
+  ansible.builtin.assert:
+    that:
+      - rawbbit_one_aws_cli_arch | length > 0
+    fail_msg: >-
+      AWS CLI v2 installation supports x86_64 and aarch64 only.
+      Detected {{ ansible_architecture }}.
+
+- name: Check whether AWS CLI v2 is installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/aws
+  register: rawbbit_one_aws_cli_binary
+
+- name: Install AWS CLI v2 for S3 bucket management
+  when: not rawbbit_one_aws_cli_binary.stat.exists
+  block:
+    - name: Create temporary AWS CLI installation directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: rawbbit-one-awscli-
+      register: rawbbit_one_aws_cli_temp
+
+    - name: Download pinned AWS CLI v2 installer
+      ansible.builtin.get_url:
+        url: >-
+          https://awscli.amazonaws.com/awscli-exe-linux-{{
+          rawbbit_one_aws_cli_arch }}-{{
+          rawbbit_one_aws_cli_version }}.zip
+        dest: "{{ rawbbit_one_aws_cli_temp.path }}/awscliv2.zip"
+        mode: "0600"
+    - name: Extract AWS CLI v2 installer
+      ansible.builtin.unarchive:
+        src: "{{ rawbbit_one_aws_cli_temp.path }}/awscliv2.zip"
+        dest: "{{ rawbbit_one_aws_cli_temp.path }}"
+        remote_src: true
+
+    - name: Install AWS CLI v2
+      ansible.builtin.command:
+        argv:
+          - "{{ rawbbit_one_aws_cli_temp.path }}/aws/install"
+          - --install-dir
+          - /usr/local/aws-cli
+          - --bin-dir
+          - /usr/local/bin
+      args:
+        creates: /usr/local/bin/aws
+
+  always:
+    - name: Remove temporary AWS CLI installation directory
+      ansible.builtin.file:
+        path: "{{ rawbbit_one_aws_cli_temp.path }}"
+        state: absent
+      when:
+        - rawbbit_one_aws_cli_temp is defined
+        - rawbbit_one_aws_cli_temp.path is defined
+
+- name: Verify AWS CLI v2 installation
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/aws
+      - --version
+  changed_when: false
+
 - name: Create VM-one installation directory
   ansible.builtin.file:
     path: "{{ rawbbit_one_install_dir }}"
@@ -136,7 +209,7 @@
 - name: Check whether the raw S3 bucket exists
   ansible.builtin.command:
     argv:
-      - aws
+      - /usr/local/bin/aws
       - s3api
       - head-bucket
       - --bucket
@@ -155,7 +228,7 @@
 - name: Create the raw S3 bucket when absent
   ansible.builtin.command:
     argv:
-      - aws
+      - /usr/local/bin/aws
       - s3api
       - create-bucket
       - --bucket

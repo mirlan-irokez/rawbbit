@@ -18,3 +18,4 @@ rawbbit_one_seaweed_volume_size_limit_mb: 5000
 rawbbit_one_seaweed_volume_max: 0
 rawbbit_one_seaweed_volume_min_free_space_gb: 5
 rawbbit_one_validate_tls: "{{ rawbbit_validate_tls | default(true) }}"
+rawbbit_one_aws_cli_version: "2.36.24"

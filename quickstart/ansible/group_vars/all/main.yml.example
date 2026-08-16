@@ -33,4 +33,5 @@ rawbbit_two_s3_bucket: rawbbit_raw
 rawbbit_two_s3_prefix: raw
 rawbbit_two_clickhouse_config_profile: low-memory.xml
 rawbbit_two_clickhouse_users_profile: low-memory-users.xml
-rawbbit_two_raw_load_mode: legacy
+rawbbit_two_raw_load_mode: dbt
+rawbbit_two_dbt_runner_image: rawbbit-dbt-runner:local

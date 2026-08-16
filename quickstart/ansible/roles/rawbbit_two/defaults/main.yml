@@ -14,11 +14,14 @@ rawbbit_two_s3_bucket: rawbbit_raw
 rawbbit_two_s3_prefix: raw
 rawbbit_two_clickhouse_config_profile: low-memory.xml
 rawbbit_two_clickhouse_users_profile: low-memory-users.xml
-rawbbit_two_raw_load_mode: legacy
+rawbbit_two_raw_load_mode: dbt
 rawbbit_two_dbt_runner_image: ghcr.io/mirlan-irokez/rawbbit-dbt-runner:0.1.1
 rawbbit_two_dbt_threads: 2
 rawbbit_two_dbt_clickhouse_max_threads: 2
 rawbbit_two_dbt_hourly_lookback_hours: 3
 rawbbit_two_dbt_daily_lookback_days: 3
 rawbbit_two_dbt_backfill_chunk_hours: 24
+rawbbit_two_dbt_build_context: >-
+  {{ rawbbit_two_install_dir }}/.dbt-build-context
 rawbbit_two_validate_tls: "{{ rawbbit_validate_tls | default(true) }}"
+rawbbit_two_aws_cli_version: "2.36.24"

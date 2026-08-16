@@ -23,6 +23,83 @@
     fail_msg: Replace all VM-two example hostnames and Vault placeholders.
   no_log: true
 
+- name: Select the AWS CLI architecture
+  ansible.builtin.set_fact:
+    rawbbit_two_aws_cli_arch: >-
+      {{
+        {
+          'x86_64': 'x86_64',
+          'aarch64': 'aarch64'
+        }.get(ansible_architecture, '')
+      }}
+  when: rawbbit_two_raw_load_mode == "legacy"
+
+- name: Validate AWS CLI architecture support
+  ansible.builtin.assert:
+    that:
+      - rawbbit_two_aws_cli_arch | length > 0
+    fail_msg: >-
+      AWS CLI v2 installation supports x86_64 and aarch64 only.
+      Detected {{ ansible_architecture }}.
+  when: rawbbit_two_raw_load_mode == "legacy"
+
+- name: Check whether AWS CLI is installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/aws
+  register: rawbbit_two_aws_cli_binary
+  when: rawbbit_two_raw_load_mode == "legacy"
+
+- name: Install AWS CLI v2 for the legacy loader
+  when:
+    - rawbbit_two_raw_load_mode == "legacy"
+    - not rawbbit_two_aws_cli_binary.stat.exists
+  block:
+    - name: Create temporary AWS CLI installation directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: rawbbit-awscli-
+      register: rawbbit_two_aws_cli_temp
+
+    - name: Download pinned AWS CLI v2 installer
+      ansible.builtin.get_url:
+        url: >-
+          https://awscli.amazonaws.com/awscli-exe-linux-{{
+          rawbbit_two_aws_cli_arch }}-{{
+          rawbbit_two_aws_cli_version }}.zip
+        dest: "{{ rawbbit_two_aws_cli_temp.path }}/awscliv2.zip"
+        mode: "0600"
+    - name: Extract AWS CLI v2 installer
+      ansible.builtin.unarchive:
+        src: "{{ rawbbit_two_aws_cli_temp.path }}/awscliv2.zip"
+        dest: "{{ rawbbit_two_aws_cli_temp.path }}"
+        remote_src: true
+
+    - name: Install AWS CLI v2
+      ansible.builtin.command:
+        argv:
+          - "{{ rawbbit_two_aws_cli_temp.path }}/aws/install"
+          - --install-dir
+          - /usr/local/aws-cli
+          - --bin-dir
+          - /usr/local/bin
+      args:
+        creates: /usr/local/bin/aws
+
+  always:
+    - name: Remove temporary AWS CLI installation directory
+      ansible.builtin.file:
+        path: "{{ rawbbit_two_aws_cli_temp.path }}"
+        state: absent
+      when: rawbbit_two_aws_cli_temp.path is defined
+
+- name: Verify AWS CLI v2 installation
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/aws
+      - --version
+  changed_when: false
+  when: rawbbit_two_raw_load_mode == "legacy"
+
 - name: Read deployment account numeric ID
   ansible.builtin.command: "id -u {{ rawbbit_deploy_user }}"
   changed_when: false
@@ -63,14 +140,87 @@
     group: "{{ rawbbit_deploy_user }}"
     mode: "0755"
 
-- name: Copy tracked VM-two quickstart artifacts
+- name: Create VM-two artifact directories
+  ansible.builtin.file:
+    path: "{{ rawbbit_two_install_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "0755"
+  loop:
+    - clickhouse/config.d
+    - clickhouse/initdb.d
+    - clickhouse/users.d
+    - postgres/initdb.d
+
+- name: Copy required VM-two runtime artifacts
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../vm_rawbbit_two/"
-    dest: "{{ rawbbit_two_install_dir }}/"
+    src: "{{ playbook_dir }}/../vm_rawbbit_two/{{ item.path }}"
+    dest: "{{ rawbbit_two_install_dir }}/{{ item.path }}"
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: docker-compose.yml
+      mode: "0644"
+    - path: docker-compose.dozzle.yml
+      mode: "0644"
+    - path: bootstrap-host-dirs.sh
+      mode: "0755"
+    - path: clickhouse/config.d/raw-s3-named-collection.xml
+      mode: "0644"
+    - path: "clickhouse/config.d/{{ rawbbit_two_clickhouse_config_profile }}"
+      mode: "0644"
+    - path: clickhouse/initdb.d/02_service_users.sh
+      mode: "0755"
+    - path: clickhouse/schema_analytics_events.sql
+      mode: "0644"
+    - path: "clickhouse/users.d/{{ rawbbit_two_clickhouse_users_profile }}"
+      mode: "0644"
+    - path: postgres/initdb.d/01_metabase_database.sh
+      mode: "0755"
+
+- name: Copy legacy loader artifacts only in legacy mode
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../vm_rawbbit_two/{{ item }}"
+    dest: "{{ rawbbit_two_install_dir }}/{{ item }}"
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "0755"
+  loop:
+    - clickhouse/load_events_hourly.sh
+    - install-hourly-loader-cron.sh
+  when: rawbbit_two_raw_load_mode == "legacy"
+
+- name: Remove files left by previous broad copies
+  ansible.builtin.file:
+    path: "{{ rawbbit_two_install_dir }}/{{ item }}"
+    state: absent
+  loop:
+    - .env.example
+    - .env.demoprod
+    - Caddyfile.dozzle.example
+    - README.md
+
+- name: Copy dbt-runner build context for the local image
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../dbt_project/"
+    dest: "{{ rawbbit_two_dbt_build_context }}/"
     owner: "{{ rawbbit_deploy_user }}"
     group: "{{ rawbbit_deploy_user }}"
     mode: preserve
     directory_mode: "0755"
+  when: rawbbit_two_dbt_runner_image == "rawbbit-dbt-runner:local"
+
+- name: Build dbt-runner with the deployment account UID and GID
+  community.docker.docker_image_build:
+    name: "{{ rawbbit_two_dbt_runner_image }}"
+    path: "{{ rawbbit_two_dbt_build_context }}"
+    args:
+      DBT_UID: "{{ rawbbit_two_deploy_uid.stdout }}"
+      DBT_GID: "{{ rawbbit_two_deploy_gid.stdout }}"
+  become: false
+  when: rawbbit_two_dbt_runner_image == "rawbbit-dbt-runner:local"
 
 - name: Render private VM-two environment
   ansible.builtin.template:
@@ -133,7 +283,12 @@
       - docker-compose.yml
       - docker-compose.dozzle.yml
     build: never
-    pull: always
+    pull: >-
+      {{
+        'missing'
+        if rawbbit_two_dbt_runner_image == 'rawbbit-dbt-runner:local'
+        else 'always'
+      }}
     state: present
     wait: true
     wait_timeout: 600

@@ -20,8 +20,8 @@
 
 - name: Check GeoIP database on the Ansible controller
   ansible.builtin.stat:
-      path: >-
-        {{ playbook_dir }}/../vm_rawbbit_one/geoip/dbip-country-lite.mmdb
+    path: >-
+      {{ playbook_dir }}/../vm_rawbbit_one/geoip/dbip-country-lite.mmdb
   delegate_to: localhost
   become: false
   register: rawbbit_one_geoip_source

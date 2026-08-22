@@ -18,6 +18,28 @@
     fail_msg: Replace all VM-one example hostnames and Vault placeholders.
   no_log: true
 
+- name: Check GeoIP database on the Ansible controller
+  ansible.builtin.stat:
+      path: >-
+        {{ playbook_dir }}/../vm_rawbbit_one/geoip/dbip-country-lite.mmdb
+  delegate_to: localhost
+  become: false
+  register: rawbbit_one_geoip_source
+  changed_when: false
+  when: rawbbit_one_geoip_enabled | bool
+
+- name: Require GeoIP database when enrichment is enabled
+  ansible.builtin.assert:
+    that:
+      - rawbbit_one_geoip_source.stat.exists | default(false)
+      - rawbbit_one_geoip_source.stat.isreg | default(false)
+      - (rawbbit_one_geoip_source.stat.size | default(0) | int) > 0
+    fail_msg: >-
+      rawbbit_one_geoip_enabled is true, but
+      quickstart/vm_rawbbit_one/geoip/dbip-country-lite.mmdb
+      is missing or empty on the Ansible workstation.
+  when: rawbbit_one_geoip_enabled | bool
+
 - name: Select the AWS CLI architecture
   ansible.builtin.set_fact:
     rawbbit_one_aws_cli_arch: >-
@@ -99,14 +121,57 @@
     group: "{{ rawbbit_deploy_user }}"
     mode: "0755"
 
-- name: Copy tracked VM-one quickstart artifacts
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../vm_rawbbit_one/"
-    dest: "{{ rawbbit_one_install_dir }}/"
+- name: Create VM-one artifact directories
+  ansible.builtin.file:
+    path: "{{ rawbbit_one_install_dir }}/{{ item }}"
+    state: directory
     owner: "{{ rawbbit_deploy_user }}"
     group: "{{ rawbbit_deploy_user }}"
-    mode: preserve
-    directory_mode: "0755"
+    mode: "0755"
+  loop:
+    - seaweedfs
+    - geoip
+
+- name: Copy GeoIP database when enrichment is enabled
+  ansible.builtin.copy:
+    src: >-
+      {{ playbook_dir }}/../vm_rawbbit_one/geoip/dbip-country-lite.mmdb
+    dest: "{{ rawbbit_one_install_dir }}/geoip/dbip-country-lite.mmdb"
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "0644"
+  register: rawbbit_one_geoip_database
+  when: rawbbit_one_geoip_enabled | bool
+
+- name: Copy required VM-one runtime artifacts
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../vm_rawbbit_one/{{ item.path }}"
+    dest: "{{ rawbbit_one_install_dir }}/{{ item.path }}"
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: docker-compose.yml
+      mode: "0644"
+    - path: docker-compose.dozzle.yml
+      mode: "0644"
+    - path: bootstrap-host-dirs.sh
+      mode: "0755"
+    - path: nats-server.conf
+      mode: "0644"
+    - path: seaweedfs/filer.toml
+      mode: "0644"
+
+- name: Remove files left by previous broad copies
+  ansible.builtin.file:
+    path: "{{ rawbbit_one_install_dir }}/{{ item }}"
+    state: absent
+  loop:
+    - .env.example
+    - Caddyfile.dozzle.example
+    - README.md
+    - geoip/README.md
+    - seaweedfs/s3.json.example
 
 - name: Render private VM-one environment
   ansible.builtin.template:
@@ -140,6 +205,7 @@
     chdir: "{{ rawbbit_one_install_dir }}"
   environment:
     RAWBBIT_ONE_ROOT: "{{ rawbbit_one_root }}"
+    RAWBBIT_ONE_RUNTIME_OWNER: "{{ rawbbit_deploy_user }}"
   changed_when: false
 
 - name: Configure authenticated Dozzle for VM one
@@ -183,6 +249,20 @@
     wait_timeout: 300
   become: false
   no_log: true
+
+- name: Restart collector after GeoIP database update
+  community.docker.docker_compose_v2:
+    project_src: "{{ rawbbit_one_install_dir }}"
+    files:
+      - docker-compose.yml
+      - docker-compose.dozzle.yml
+    services:
+      - collector-api
+    state: restarted
+  become: false
+  when:
+    - rawbbit_one_geoip_enabled | bool
+    - rawbbit_one_geoip_database is changed
 
 - name: Wait for collector HTTPS health
   ansible.builtin.uri:
@@ -243,7 +323,7 @@
   changed_when: true
   no_log: true
 
-- name: Inspect the NATS EVENTS stream
+- name: Inspect the NATS EVENTS stream as JSON
   ansible.builtin.command:
     argv:
       - docker
@@ -258,15 +338,28 @@
       - stream
       - info
       - EVENTS
+      - --json
   become: false
   changed_when: false
   register: rawbbit_one_nats_stream
+- name: Parse the NATS EVENTS stream information
+  ansible.builtin.set_fact:
+    rawbbit_one_nats_stream_info: >-
+      {{ rawbbit_one_nats_stream.stdout | from_json }}
 
 - name: Verify the configured NATS stream retention
   ansible.builtin.assert:
     that:
-      - "'24h0m0s' in rawbbit_one_nats_stream.stdout"
-    fail_msg: The EVENTS stream does not report the expected 24-hour maximum age.
+      - >-
+        (rawbbit_one_nats_stream_info.config.max_age | int)
+        ==
+        ((rawbbit_one_nats_stream_max_age_seconds | int) * 1000000000)
+    fail_msg: >-
+      The EVENTS stream max_age is
+      {{ rawbbit_one_nats_stream_info.config.max_age }} nanoseconds,
+      but the expected value is
+      {{ (rawbbit_one_nats_stream_max_age_seconds | int) * 1000000000 }}
+      nanoseconds.
 
 - name: Verify authenticated Dozzle endpoint is reachable
   ansible.builtin.uri:

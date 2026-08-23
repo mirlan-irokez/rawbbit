@@ -1,0 +1,22 @@
+---
+- name: Recreate NATS after configuration change
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - docker-compose.yml
+      - -f
+      - docker-compose.dozzle.yml
+      - up
+      - -d
+      - --no-deps
+      - --force-recreate
+      - --wait
+      - --wait-timeout
+      - "120"
+      - nats
+  args:
+    chdir: "{{ rawbbit_one_install_dir }}"
+  become: false
+  changed_when: true

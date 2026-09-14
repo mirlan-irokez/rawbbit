@@ -18,6 +18,40 @@
     fail_msg: Replace all VM-one example hostnames and Vault placeholders.
   no_log: true
 
+- name: Validate VM-one raw-writer throughput settings
+  ansible.builtin.assert:
+    that:
+      - >-
+        (rawbbit_one_nats_fetch_batch | type_debug == "int")
+        or (
+          (rawbbit_one_nats_fetch_batch | type_debug == "str")
+          and (rawbbit_one_nats_fetch_batch is match("^[0-9]+$"))
+        )
+      - >-
+        (rawbbit_one_raw_flush_interval_seconds | type_debug == "int")
+        or (
+          (rawbbit_one_raw_flush_interval_seconds | type_debug == "str")
+          and (rawbbit_one_raw_flush_interval_seconds is match("^[0-9]+$"))
+        )
+      - >-
+        (rawbbit_one_nats_max_ack_pending | type_debug == "int")
+        or (
+          (rawbbit_one_nats_max_ack_pending | type_debug == "str")
+          and (rawbbit_one_nats_max_ack_pending is match("^[0-9]+$"))
+        )
+      - rawbbit_one_nats_fetch_batch | int > 0
+      - rawbbit_one_raw_flush_interval_seconds | int > 0
+      - rawbbit_one_raw_flush_interval_seconds | int < 300
+      - rawbbit_one_nats_max_ack_pending | int > 0
+      - >-
+        (rawbbit_one_nats_max_ack_pending | int)
+        >= (rawbbit_one_nats_fetch_batch | int)
+    fail_msg: >-
+      VM-one raw-writer settings must be integer-form positive values;
+      the flush interval must be below the fixed 300-second ACK wait, and
+      rawbbit_one_nats_max_ack_pending must be at least
+      rawbbit_one_nats_fetch_batch.
+
 - name: Check GeoIP database on the Ansible controller
   ansible.builtin.stat:
     path: >-
@@ -356,7 +390,7 @@
       - --rm
       - --network
       - rawbbit-one_default
-      - natsio/nats-box:latest
+      - "{{ rawbbit_one_nats_box_image }}"
       - nats
       - --server
       - nats://nats:4222
@@ -385,6 +419,101 @@
       but the expected value is
       {{ (rawbbit_one_nats_stream_max_age_seconds | int) * 1000000000 }}
       nanoseconds.
+
+- name: Inspect the raw-writer JetStream consumer as JSON
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - --network
+      - rawbbit-one_default
+      - "{{ rawbbit_one_nats_box_image }}"
+      - nats
+      - --server
+      - nats://nats:4222
+      - consumer
+      - info
+      - EVENTS
+      - raw-writer
+      - --json
+  become: false
+  changed_when: false
+  register: rawbbit_one_nats_consumer
+  retries: 12
+  delay: 5
+  until: rawbbit_one_nats_consumer.rc == 0
+
+- name: Parse the raw-writer JetStream consumer information
+  ansible.builtin.set_fact:
+    rawbbit_one_nats_consumer_info: >-
+      {{ rawbbit_one_nats_consumer.stdout | from_json }}
+
+- name: Update raw-writer JetStream consumer Max Ack Pending
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - --network
+      - rawbbit-one_default
+      - "{{ rawbbit_one_nats_box_image }}"
+      - nats
+      - --server
+      - nats://nats:4222
+      - consumer
+      - update
+      - EVENTS
+      - raw-writer
+      - --max-pending
+      - "{{ rawbbit_one_nats_max_ack_pending | string }}"
+      - --force
+  become: false
+  changed_when: true
+  when:
+    - >-
+      (rawbbit_one_nats_consumer_info.config.max_ack_pending | int)
+      != (rawbbit_one_nats_max_ack_pending | int)
+
+- name: Re-inspect the raw-writer JetStream consumer after reconciliation
+  ansible.builtin.command:
+    argv:
+      - docker
+      - run
+      - --rm
+      - --network
+      - rawbbit-one_default
+      - "{{ rawbbit_one_nats_box_image }}"
+      - nats
+      - --server
+      - nats://nats:4222
+      - consumer
+      - info
+      - EVENTS
+      - raw-writer
+      - --json
+  become: false
+  changed_when: false
+  register: rawbbit_one_nats_consumer_after_update
+  retries: 12
+  delay: 5
+  until: rawbbit_one_nats_consumer_after_update.rc == 0
+
+- name: Parse the reconciled raw-writer consumer information
+  ansible.builtin.set_fact:
+    rawbbit_one_nats_consumer_info_after_update: >-
+      {{ rawbbit_one_nats_consumer_after_update.stdout | from_json }}
+
+- name: Verify raw-writer JetStream consumer Max Ack Pending
+  ansible.builtin.assert:
+    that:
+      - >-
+        (rawbbit_one_nats_consumer_info_after_update.config.max_ack_pending | int)
+        == (rawbbit_one_nats_max_ack_pending | int)
+    fail_msg: >-
+      The EVENTS/raw-writer consumer max_ack_pending is
+      {{ rawbbit_one_nats_consumer_info_after_update.config.max_ack_pending }},
+      but the expected value is {{ rawbbit_one_nats_max_ack_pending }}.
 
 - name: Verify authenticated Dozzle endpoint is reachable
   ansible.builtin.uri:

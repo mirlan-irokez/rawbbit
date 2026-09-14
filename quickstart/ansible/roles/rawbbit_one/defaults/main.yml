@@ -14,6 +14,11 @@ rawbbit_one_cors_allow_origins: ""
 rawbbit_one_geoip_enabled: false
 rawbbit_one_log_level: INFO
 rawbbit_one_nats_stream_max_age_seconds: 86400
+rawbbit_one_nats_fetch_batch: 200
+rawbbit_one_raw_flush_interval_seconds: 60
+rawbbit_one_nats_max_ack_pending: 1000
+# Pin the ephemeral NATS administration CLI used for state-changing updates.
+rawbbit_one_nats_box_image: natsio/nats-box@sha256:ffce8bd103383f179f8c7f11cf645726acf5d17280706c530c3b342dbe16334c
 rawbbit_one_seaweed_volume_size_limit_mb: 5000
 rawbbit_one_seaweed_volume_max: 0
 rawbbit_one_seaweed_volume_min_free_space_gb: 5

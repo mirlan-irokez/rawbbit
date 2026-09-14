@@ -121,6 +121,42 @@ only the common values and that VM's section need real values; unused example
 values for the other VM are not evaluated. Copy the templates once before the
 first run, then keep and update the copied files for later reruns and recovery.
 
+### VM-one raw-writer throughput settings
+
+The VM-one non-secret variables control the raw-writer's pull and flush behavior.
+These are the recommended live/example values:
+
+```yaml
+rawbbit_one_nats_fetch_batch: 1000
+rawbbit_one_raw_flush_interval_seconds: 60
+rawbbit_one_nats_max_ack_pending: 10000
+```
+
+`rawbbit_one_nats_fetch_batch` is the maximum number of messages requested by one
+pull; it is not a minimum, so low-volume traffic does not wait for a full batch.
+`rawbbit_one_raw_flush_interval_seconds` bounds normal in-memory buffering before
+partial Parquet files are flushed. `rawbbit_one_nats_max_ack_pending` is applied
+to the existing `EVENTS/raw-writer` durable JetStream consumer after Compose
+starts. Ansible retries until the consumer exists, updates it only when needed,
+and verifies the final value without deleting or recreating the consumer.
+The role accepts positive integer-form values, requires a flush interval below
+the fixed 300-second ACK wait, and requires Max Ack Pending to be at least the
+fetch batch.
+
+If a key is omitted, the role fallback is `200` for the fetch batch, `60` seconds
+for the flush interval, and `1000` for Max Ack Pending. Once the role runs,
+`rawbbit_one_nats_max_ack_pending` is Ansible-managed consumer state; set it
+explicitly in an existing inventory if you need to preserve a manually chosen
+value rather than adopting the fallback.
+
+These settings do not require a raw-writer image rebuild. A larger Max Ack
+Pending permits more in-flight messages and can increase memory use, so monitor
+the consumer backlog, outstanding acknowledgements, redeliveries, and host
+storage while a backlog drains.
+
+The role uses a pinned `nats-box` image digest for these administrative commands;
+override that role variable only as part of a deliberate CLI upgrade.
+
 `rawbbit_admin_cidr` controls which source network UFW allows to reach SSH.
 Use a narrow `/32` address when the operator has a stable public IP.
 

@@ -20,6 +20,10 @@ rawbbit_one_s3_bucket: rawbbit_raw
 rawbbit_one_s3_prefix: raw
 rawbbit_one_cors_allow_origins: ""
 rawbbit_one_geoip_enabled: false
+rawbbit_one_nats_stream_max_age_seconds: 604800
+# 86400   = 1 day
+# 259200  = 3 days
+# 604800  = 7 days
 
 rawbbit_two_mcp_hostname: mcp.example.com
 rawbbit_two_metabase_hostname: metabase.example.com

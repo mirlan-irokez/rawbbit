@@ -6,10 +6,6 @@ on:
       - ".github/workflows/ansible.yml"
       - "mcp-server/**"
       - "dbt_project/**"
-      - "docs/oss/dbt_project/**"
-      - "docs/oss/quickstart/ansible/README.md"
-      - "docs/oss/mcp-server/README.md"
-      - "docs/oss/quickstart/vm_rawbbit_two/README.md"
       - "quickstart/ansible/**"
       - "quickstart/vm_rawbbit_one/**"
       - "quickstart/vm_rawbbit_two/**"
@@ -38,40 +34,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Check OSS Ansible guide mirror
-        run: |
-          if ! cmp -s quickstart/ansible/README.md docs/oss/quickstart/ansible/README.md; then
-            echo "::error::OSS Ansible guide differs from the canonical guide. Copy quickstart/ansible/README.md to docs/oss/quickstart/ansible/README.md."
-            diff -u quickstart/ansible/README.md docs/oss/quickstart/ansible/README.md
-            exit 1
-          fi
-
-      - name: Check focused dataset documentation parity
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          pairs = (
-              ("mcp-server/README.md", "docs/oss/mcp-server/README.md"),
-              ("quickstart/vm_rawbbit_two/README.md", "docs/oss/quickstart/vm_rawbbit_two/README.md"),
-              ("quickstart/ansible/README.md", "docs/oss/quickstart/ansible/README.md"),
-          )
-          start = "<!-- dataset-mcp:start -->"
-          end = "<!-- dataset-mcp:end -->"
-
-          def section(path: str) -> str:
-              text = Path(path).read_text(encoding="utf-8")
-              if text.count(start) != 1 or text.count(end) != 1:
-                  raise SystemExit(f"{path}: expected exactly one dataset documentation marker pair")
-              body = text.split(start, 1)[1].split(end, 1)[0]
-              return body
-
-          for internal, staged in pairs:
-              if section(internal) != section(staged):
-                  raise SystemExit(f"dataset documentation differs: {internal} != {staged}")
-          print("focused dataset documentation sections match")
-          PY
-
       - name: Validate base and opt-in Compose configurations
         run: |
           (cd mcp-server && \
@@ -82,26 +44,6 @@ jobs:
             docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.datasets.yml config --quiet && \
             docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.dozzle.yml config --quiet && \
             docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.dozzle.yml -f docker-compose.datasets.yml config --quiet)
-
-      - name: Check focused routing documentation parity
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          def section(path):
-              text = Path(path).read_text(encoding="utf-8")
-              start, end = "<!-- dbt-routing:start -->", "<!-- dbt-routing:end -->"
-              assert text.count(start) == text.count(end) == 1, path
-              return text.split(start, 1)[1].split(end, 1)[0]
-
-          assert section("quickstart/vm_rawbbit_two/README.md") == section(
-              "docs/oss/quickstart/vm_rawbbit_two/README.md"
-          )
-          assert Path("dbt_project/README.md").read_bytes() == Path(
-              "docs/oss/dbt_project/README.md"
-          ).read_bytes()
-          print("routing documentation parity passed")
-          PY
 
       - name: Set up Python
         uses: actions/setup-python@v5

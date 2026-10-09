@@ -144,7 +144,10 @@ def lab():
         for name in ("dbt_project.yml", "profiles.yml", "selectors.yml", "requirements.txt",
                      "Dockerfile", ".dockerignore", "crontab"):
             shutil.copy2(PROJECT / name, instance.work / name)
-        docker("build", "-q", "-f", str(instance.work / "Dockerfile"),
+        # Match the bind-mount owner, as production does. The runner writes
+        # private 0600 journals; a different host UID cannot inspect them.
+        docker("build", "-q", "--build-arg", f"DBT_UID={os.getuid()}",
+               "-f", str(instance.work / "Dockerfile"),
                "-t", instance.dbt_image, str(instance.work), timeout=300)
         versions = docker("run", "--rm", "--entrypoint", "dbt", instance.dbt_image, "--version", timeout=30)
         assert "installed: 1.9.10" in versions and "clickhouse: 1.9.8" in versions, versions

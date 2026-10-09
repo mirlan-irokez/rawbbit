@@ -21,6 +21,20 @@ if [[ ! -f "${QUICKSTART_DIR}/clickhouse/load_events_hourly.sh" ]]; then
   exit 1
 fi
 
+raw_load_mode="$(grep -E '^RAWBBIT_RAW_LOAD_MODE=' "${QUICKSTART_DIR}/.env" | tail -n 1 | cut -d= -f2- || true)"
+raw_load_mode="${raw_load_mode%$'\r'}"
+raw_load_mode="${raw_load_mode%\"}"
+raw_load_mode="${raw_load_mode#\"}"
+raw_load_mode="${raw_load_mode%\'}"
+raw_load_mode="${raw_load_mode#\'}"
+raw_load_mode="${raw_load_mode:-legacy}"
+
+if [[ "$raw_load_mode" != "legacy" ]]; then
+  echo "RAWBBIT_RAW_LOAD_MODE=${raw_load_mode}; refusing to install the legacy loader cron." >&2
+  echo "Set RAWBBIT_RAW_LOAD_MODE=legacy before installing this optional cron." >&2
+  exit 1
+fi
+
 printf -v quoted_quickstart_dir "%q" "${QUICKSTART_DIR}"
 printf -v quoted_log_file "%q" "${LOG_FILE}"
 

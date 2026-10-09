@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "datasets": [
+{% for dataset in rawbbit_two_datasets if dataset.enabled | default(true) %}
+    {
+      "id": {{ dataset.id | to_json }},
+      "enabled": true,
+      "endpoint_path": {{ ('/datasets/' ~ dataset.id ~ rawbbit_two_mcp_path) | to_json }},
+      "database": {{ dataset.database | to_json }},
+      "table": {{ dataset.table | default('events') | to_json }},
+      "main_exposed": {{ dataset.main_exposed | default(false) | to_json }},
+      "clickhouse_user": {{ dataset.mcp_user | to_json }},
+      "clickhouse_password": {{ vault_rawbbit_two_dataset_credentials[dataset.secret_ref].mcp_password | to_json }},
+      "bearer_tokens": {{ vault_rawbbit_two_dataset_credentials[dataset.secret_ref].bearer_tokens | to_json }}{% if dataset.limits is defined %}{% for name in ['max_query_rows', 'max_sample_rows', 'max_execution_seconds'] if name in dataset.limits %},
+      {{ name | to_json }}: {{ dataset.limits[name] }}{% endfor %}{% endif %}
+    }{% if not loop.last %},{% endif %}
+{% endfor %}
+  ]
+}

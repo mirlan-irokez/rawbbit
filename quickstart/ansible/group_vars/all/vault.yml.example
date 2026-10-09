@@ -20,6 +20,15 @@ vault_rawbbit_two_clickhouse_loader_password: change_me
 vault_rawbbit_two_clickhouse_dbt_password: change_me
 vault_rawbbit_two_mcp_api_keys:
   operator: change_me
+vault_rawbbit_two_dataset_credentials:
+  team_a:
+    mcp_password: change_me_team_a_clickhouse_password
+    bearer_tokens:
+      agent: change_me_team_a_scoped_mcp_token
+  team_b:
+    mcp_password: change_me_team_b_clickhouse_password
+    bearer_tokens:
+      agent: change_me_team_b_scoped_mcp_token
 vault_rawbbit_two_postgres_superuser_password: change_me
 vault_rawbbit_two_metabase_db_password: change_me
 vault_rawbbit_two_s3_reader_access_key: change_me

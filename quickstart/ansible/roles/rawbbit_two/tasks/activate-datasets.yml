@@ -1,0 +1,90 @@
+---
+- name: Compare staged runtime registry to active file
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - "{{ rawbbit_two_install_dir }}/datasets-runtime.json.stage"
+    - "{{ rawbbit_two_install_dir }}/datasets-runtime.json"
+  register: rawbbit_two_runtime_file_stats
+  no_log: true
+
+- name: Determine whether dataset MCP recreation is required
+  ansible.builtin.set_fact:
+    rawbbit_two_runtime_config_changed: >-
+      {{ not rawbbit_two_runtime_file_stats.results[1].stat.exists or
+      rawbbit_two_runtime_file_stats.results[0].stat.checksum !=
+      rawbbit_two_runtime_file_stats.results[1].stat.checksum }}
+  no_log: true
+
+- name: Include MCP image and environment changes in immediate recreation decision
+  ansible.builtin.set_fact:
+    rawbbit_two_mcp_recreate_required: >-
+      {{ (rawbbit_two_runtime_config_changed | bool) or
+      (rawbbit_two_mcp_image_changed | bool) or
+      (rawbbit_two_mcp_environment_changed | bool) }}
+  no_log: true
+
+- name: Activate validated dataset runtime registry atomically
+  ansible.builtin.command:
+    argv:
+      - mv
+      - -f
+      - --
+      - "{{ rawbbit_two_install_dir }}/datasets-runtime.json.stage"
+      - "{{ rawbbit_two_install_dir }}/datasets-runtime.json"
+  become: false
+  changed_when: true
+  when: rawbbit_two_runtime_config_changed | bool
+
+- name: Discard unchanged staged runtime registry
+  ansible.builtin.file:
+    path: "{{ rawbbit_two_install_dir }}/datasets-runtime.json.stage"
+    state: absent
+  no_log: true
+  when: not (rawbbit_two_runtime_config_changed | bool)
+
+- name: Force MCP recreation immediately after runtime, image, or environment change
+  community.docker.docker_compose_v2:
+    project_src: "{{ rawbbit_two_install_dir }}"
+    files:
+      - docker-compose.yml
+      - docker-compose.dozzle.yml
+      - docker-compose.datasets.yml
+    services:
+      - mcp-server
+    dependencies: false
+    build: never
+    # Versioned images are immutable release inputs. Pull only absent tags so a
+    # dataset-only change cannot refresh/restart unrelated pinned services.
+    pull: missing
+    state: present
+    recreate: always
+    wait: true
+    wait_timeout: 120
+  become: false
+  no_log: true
+  when: rawbbit_two_mcp_recreate_required | bool
+
+- name: Start VM-two services with the validated dataset overlay
+  community.docker.docker_compose_v2:
+    project_src: "{{ rawbbit_two_install_dir }}"
+    files:
+      - docker-compose.yml
+      - docker-compose.dozzle.yml
+      - docker-compose.datasets.yml
+    services:
+      - postgres
+      - metabase
+      - mcp-server
+      - caddy
+      - dozzle
+    dependencies: false
+    build: never
+    pull: missing
+    state: present
+    recreate: auto
+    wait: true
+    wait_timeout: 600
+  become: false
+  no_log: true

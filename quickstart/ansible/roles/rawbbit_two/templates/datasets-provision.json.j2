@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "main_database": "analytics",
+  "main_user": "rawbbit_mcp",
+  "admin": {
+    "host": "127.0.0.1",
+    "port": {{ rawbbit_two_clickhouse_http_port | default(8123) }},
+    "username": "admin",
+    "password": {{ vault_rawbbit_two_clickhouse_admin_password | to_json }},
+    "timeout_seconds": 15
+  },
+  "datasets": [
+{% for dataset in rawbbit_two_datasets %}
+    {
+      "id": {{ dataset.id | to_json }},
+      "enabled": {{ dataset.enabled | default(true) | to_json }},
+      "mode": {{ dataset.mode | to_json }},
+      "endpoint_path": {{ ('/datasets/' ~ dataset.id ~ rawbbit_two_mcp_path) | to_json }},
+      "database": {{ dataset.database | to_json }},
+      "table": {{ dataset.table | default('events') | to_json }},
+      "create_table": {{ dataset.create_table | default(false) | to_json }},
+      "main_exposed": {{ dataset.main_exposed | default(false) | to_json }},
+      "mcp_user": {{ dataset.mcp_user | to_json }},
+      "mcp_role": {{ dataset.mcp_role | to_json }},
+      "password_revision": {{ dataset.password_revision | default(1) }},
+      "limits": {{ dataset.limits | default({}) | to_json }},
+      "adopt": {{ dataset.adopt | default({}) | to_json }}{% if (dataset.enabled | default(true)) and dataset.mode == 'managed' %},
+      "mcp_password": {{ vault_rawbbit_two_dataset_credentials[dataset.secret_ref].mcp_password | to_json }}{% endif %}
+    }{% if not loop.last %},{% endif %}
+{% endfor %}
+  ]
+}

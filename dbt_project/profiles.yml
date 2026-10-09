@@ -3,6 +3,7 @@ rawbbit:
   outputs:
     production:
       type: clickhouse
+      driver: http
       host: "{{ env_var('CLICKHOUSE_HOST', 'clickhouse') }}"
       port: "{{ env_var('CLICKHOUSE_PORT', '8123') | int }}"
       schema: "{{ env_var('CLICKHOUSE_DATABASE', 'analytics') }}"
@@ -13,6 +14,14 @@ rawbbit:
       threads: "{{ env_var('DBT_THREADS', '2') | int }}"
       connect_timeout: 10
       send_receive_timeout: 600
+      retries: 0
+      check_exchange: false
       use_lw_deletes: true
       custom_settings:
         max_threads: "{{ env_var('DBT_CLICKHOUSE_MAX_THREADS', '2') | int }}"
+        max_execution_time: 600
+        mutations_sync: 2
+        lightweight_deletes_sync: 2
+        log_queries: 1
+        log_query_settings: 1
+        log_comment: "{{ env_var('RAWBBIT_DBT_ATTEMPT_TAG', '') }}"

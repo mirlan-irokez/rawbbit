@@ -29,6 +29,31 @@ rawbbit_one_nats_max_ack_pending: 10000
 # 604800  = 7 days
 
 rawbbit_two_mcp_hostname: mcp.example.com
+# Keep the current published image until the dataset-capable MCP release exists.
+rawbbit_two_mcp_path: /mcp
+rawbbit_two_mcp_image: ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.3
+# Optional dataset registry. Each secret_ref selects a matching entry in
+# vault_rawbbit_two_dataset_credentials. Dataset support requires a newer
+# published MCP image; Ansible rejects this still-current 0.0.2 pin.
+rawbbit_two_datasets: []
+# Example (copy into rawbbit_two_datasets to opt in after the new image release):
+# rawbbit_two_datasets:
+#   - id: team_a
+#     enabled: true
+#     mode: managed
+#     database: team_a
+#     table: events
+#     create_table: true
+#     main_exposed: true
+#     mcp_user: rawbbit_mcp_team_a
+#     mcp_role: rawbbit_role_team_a
+#     # Increment when intentionally rotating the Vault mcp_password.
+#     password_revision: 1
+#     secret_ref: team_a
+#     limits:
+#       max_query_rows: 500
+#       max_sample_rows: 50
+#       max_execution_seconds: 30
 rawbbit_two_metabase_hostname: metabase.example.com
 rawbbit_two_clickhouse_hostname: clickhouse.example.com
 rawbbit_two_dozzle_hostname: logs-two.example.com
@@ -43,3 +68,14 @@ rawbbit_two_clickhouse_config_profile: low-memory.xml
 rawbbit_two_clickhouse_users_profile: low-memory-users.xml
 rawbbit_two_raw_load_mode: dbt
 rawbbit_two_dbt_runner_image: rawbbit-dbt-runner:local
+rawbbit_two_clickhouse_database: analytics
+# Requires a released routing/gate-capable image (or the local build).
+rawbbit_two_dbt_routing_enabled: false
+rawbbit_two_dbt_routes: []
+# Metadata must remain in rawbbit_two_datasets even with enabled: false.
+# rawbbit_two_dbt_routes:
+#   - app_id: runner_rawbbit
+#     dataset_id: runner_rawbbit
+#     enabled: true  # Optional, defaults true; false omits this route from JSON.
+# Advanced drain/recovery/rollback settings use the role's safe defaults.
+# See ../../README.md#safe-first-upgrade-and-route-changes before overriding them.

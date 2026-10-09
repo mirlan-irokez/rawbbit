@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - ".github/workflows/ansible.yml"
+      - "mcp-server/**"
+      - "dbt_project/**"
       - "quickstart/ansible/**"
       - "quickstart/vm_rawbbit_one/**"
       - "quickstart/vm_rawbbit_two/**"
@@ -12,6 +14,12 @@ on:
       - main
     paths:
       - ".github/workflows/ansible.yml"
+      - "mcp-server/**"
+      - "dbt_project/**"
+      - "docs/oss/dbt_project/**"
+      - "docs/oss/quickstart/ansible/README.md"
+      - "docs/oss/mcp-server/README.md"
+      - "docs/oss/quickstart/vm_rawbbit_two/README.md"
       - "quickstart/ansible/**"
       - "quickstart/vm_rawbbit_one/**"
       - "quickstart/vm_rawbbit_two/**"
@@ -25,6 +33,17 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Validate base and opt-in Compose configurations
+        run: |
+          (cd mcp-server && \
+            docker compose --env-file .env.example -f docker-compose.yml config --quiet && \
+            docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.datasets.yml config --quiet)
+          (cd quickstart/vm_rawbbit_two && \
+            docker compose --env-file .env.example -f docker-compose.yml config --quiet && \
+            docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.datasets.yml config --quiet && \
+            docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.dozzle.yml config --quiet && \
+            docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.dozzle.yml -f docker-compose.datasets.yml config --quiet)
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -42,6 +61,48 @@ jobs:
           ansible-galaxy collection install
           -r quickstart/ansible/requirements.yml
 
+      - name: Check VM-two dataset preflight installer ordering
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          tasks = yaml.safe_load(Path("quickstart/ansible/roles/rawbbit_two/tasks/main.yml").read_text())
+          indexes = {task["name"]: index for index, task in enumerate(tasks) if isinstance(task, dict) and "name" in task}
+
+          def task(name):
+              return tasks[indexes[name]]
+
+          journal_stat = indexes["Check whether a prior dataset ownership journal exists"]
+          set_fact = indexes["Determine whether dataset isolation state must be retained"]
+          make_dir = task("Create root-owned ClickHouse provisioning directory")
+          install = task("Install privileged dataset provisioner and canonical schema")
+          preflight = task("Preflight dataset ownership and main-user isolation before mutation")
+          assert journal_stat < set_fact < indexes["Install privileged dataset provisioner and canonical schema"] < indexes[
+              "Preflight dataset ownership and main-user isolation before mutation"
+          ]
+          set_fact_task = task("Determine whether dataset isolation state must be retained")
+          set_fact_action = next(
+              value for key, value in set_fact_task.items()
+              if key == "set_fact" or key.endswith(".set_fact")
+          )
+          expression = set_fact_action["rawbbit_two_dataset_preflight_required"]
+          assert "rawbbit_two_datasets | length > 0" in expression
+          assert "rawbbit_two_dataset_journal_stat.stat.exists" in expression
+          expected_when = "rawbbit_two_dataset_preflight_required | bool"
+          assert make_dir["when"] == expected_when
+          assert install["when"] == expected_when
+          assert preflight["when"] == expected_when
+
+          def needs_preflight(dataset_count, journal_exists):
+              return dataset_count > 0 or journal_exists
+
+          assert needs_preflight(1, False)  # fresh all-disabled registry
+          assert needs_preflight(0, True)   # removed registry with retained journal
+          assert not needs_preflight(0, False)  # fresh empty installation
+          print("VM-two dataset preflight/install guards and ordering passed")
+          PY
+
       - name: Run playbook syntax checks
         working-directory: quickstart/ansible
         run: |
@@ -51,3 +112,63 @@ jobs:
 
       - name: Run ansible-lint
         run: ansible-lint quickstart/ansible
+
+  mcp-and-provisioner-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install MCP and test dependencies
+        run: |
+          python -m pip install -r mcp-server/requirements.txt pytest
+
+      - name: Run MCP and provisioner tests
+        env:
+          PYTHONPATH: mcp-server/src
+        run: >-
+          python -m pytest -q mcp-server/tests quickstart/vm_rawbbit_two/clickhouse/tests
+
+  dbt-runner-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test tools
+        run: python -m pip install pytest PyYAML
+
+      - name: Validate runner and deployment contracts
+        run: >-
+          python -m pytest -q dbt_project quickstart/vm_rawbbit_two
+          --ignore=dbt_project/integration_tests
+
+  dbt-routing-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned dbt adapter and integration test tools
+        run: python -m pip install -r dbt_project/requirements.txt pytest pyarrow
+
+      - name: Exercise routed incremental ingestion on disposable ClickHouse
+        env:
+          RAWBBIT_DBT_INTEGRATION: "1"
+        run: python -m pytest -q dbt_project/integration_tests

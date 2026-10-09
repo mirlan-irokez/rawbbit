@@ -1,0 +1,80 @@
+---
+- name: Validate VM-two Compose configuration without dataset overlay
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - docker-compose.yml
+      - -f
+      - docker-compose.dozzle.yml
+      - config
+      - --quiet
+  args:
+    chdir: "{{ rawbbit_two_install_dir }}"
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Remove staged dataset provisioning files after successful isolation preflight
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ rawbbit_two_root }}/clickhouse/datasets-provision.json"
+    - "{{ rawbbit_two_install_dir }}/datasets-runtime.json.stage"
+  become: true
+  no_log: true
+
+- name: Force MCP recreation immediately when disabling the last dataset endpoint
+  community.docker.docker_compose_v2:
+    project_src: "{{ rawbbit_two_install_dir }}"
+    files:
+      - docker-compose.yml
+      - docker-compose.dozzle.yml
+    services:
+      - mcp-server
+    dependencies: false
+    build: never
+    pull: missing
+    state: present
+    recreate: always
+    wait: true
+    wait_timeout: 120
+  become: false
+  no_log: true
+  when:
+    - >-
+      (rawbbit_two_active_runtime_file.stat.exists | default(false)) or
+      ((rawbbit_two_mcp_container_id.stdout | default('') | trim | length > 0) and
+      ((rawbbit_two_mcp_image_changed | default(false) | bool) or
+      (rawbbit_two_mcp_environment_changed | default(false) | bool)))
+
+- name: Start VM-two services without dataset overlay
+  community.docker.docker_compose_v2:
+    project_src: "{{ rawbbit_two_install_dir }}"
+    files:
+      - docker-compose.yml
+      - docker-compose.dozzle.yml
+    services:
+      - postgres
+      - metabase
+      - mcp-server
+      - caddy
+      - dozzle
+    dependencies: false
+    build: never
+    pull: missing
+    state: present
+    recreate: auto
+    wait: true
+    wait_timeout: 600
+  become: false
+  no_log: true
+
+- name: Remove retired runtime registry after MCP has been recreated without it
+  ansible.builtin.file:
+    path: "{{ rawbbit_two_install_dir }}/datasets-runtime.json"
+    state: absent
+  no_log: true
+  when: rawbbit_two_active_runtime_file.stat.exists | default(false)

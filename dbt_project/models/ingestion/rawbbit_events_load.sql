@@ -72,6 +72,7 @@ ranked as (
   from parsed
   where event_id is not null
     and event_time is not null
+    {{ rawbbit_app_predicate() }}
 )
 
 select

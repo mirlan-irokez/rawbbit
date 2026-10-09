@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     )
 
     mcp_api_keys_json: str = Field(default="", alias="MCP_API_KEYS_JSON")
+    mcp_datasets_file: str = Field(default="", alias="MCP_DATASETS_FILE")
 
     jwt_public_key: str = Field(default="", alias="MCP_JWT_PUBLIC_KEY")
     jwt_jwks_uri: str = Field(default="", alias="MCP_JWT_JWKS_URI")

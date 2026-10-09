@@ -41,12 +41,42 @@
 
 {% macro rawbbit_hour_paths() %}
   {% set window = rawbbit_window() %}
+  {% set app = rawbbit_app_selection()['include'] %}
+  {% set partition = app if app is not none else '*' %}
   {% set paths = [] %}
   {% for offset in range(window['hour_count']) %}
     {% set hour_dt = window['start_dt'] + modules.datetime.timedelta(hours=offset) %}
-    {% do paths.append('app_id=*/event_date=' ~ hour_dt.strftime('%Y-%m-%d') ~ '/hour=' ~ hour_dt.strftime('%H') ~ '/*.parquet') %}
+    {% do paths.append('app_id=' ~ partition ~ '/event_date=' ~ hour_dt.strftime('%Y-%m-%d') ~ '/hour=' ~ hour_dt.strftime('%H') ~ '/*.parquet') %}
   {% endfor %}
   {{ return(paths) }}
+{% endmacro %}
+
+{% macro rawbbit_app_selection() %}
+  {% set include = var('rawbbit_app_id', none) %}
+  {% set exclude = var('rawbbit_excluded_app_ids', []) %}
+  {% if exclude is string or exclude is mapping or exclude is not iterable %}
+    {{ exceptions.raise_compiler_error('rawbbit_excluded_app_ids must be a list') }}
+  {% endif %}
+  {% if include is not none and exclude | length > 0 %}
+    {{ exceptions.raise_compiler_error('include and exclude app modes are mutually exclusive') }}
+  {% endif %}
+  {% set apps = exclude | list %}
+  {% if include is not none %}{% do apps.append(include) %}{% endif %}
+  {% for app in apps %}
+    {% if app is not string or not modules.re.match('^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$', app) or app in ['.', '..'] or '\n' in app %}
+      {{ exceptions.raise_compiler_error('unsafe app partition identifier') }}
+    {% endif %}
+  {% endfor %}
+  {{ return({'include': include, 'exclude': exclude}) }}
+{% endmacro %}
+
+{% macro rawbbit_app_predicate() %}
+  {% set selection = rawbbit_app_selection() %}
+  {% if selection['include'] is not none %}
+    and app_id = '{{ selection['include'] }}'
+  {% elif selection['exclude'] | length > 0 %}
+    and app_id not in ({% for app in selection['exclude'] %}'{{ app }}'{% if not loop.last %}, {% endif %}{% endfor %})
+  {% endif %}
 {% endmacro %}
 
 {% macro rawbbit_parquet_structure() %}

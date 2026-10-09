@@ -56,3 +56,5 @@ quickstart/ansible/.vault-pass
 
 # Operator-provided GeoIP databases
 quickstart/vm_rawbbit_one/geoip/*.mmdb
+
+.ansible/

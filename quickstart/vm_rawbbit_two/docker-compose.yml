@@ -96,6 +96,8 @@ services:
       DBT_THREADS: ${DBT_THREADS:-2}
       DBT_CLICKHOUSE_MAX_THREADS: ${DBT_CLICKHOUSE_MAX_THREADS:-2}
       RAWBBIT_RAW_LOAD_MODE: ${RAWBBIT_RAW_LOAD_MODE:-legacy}
+      RAWBBIT_DBT_ROUTING_ENABLED: ${RAWBBIT_DBT_ROUTING_ENABLED:-0}
+      RAWBBIT_DBT_ROUTES_FILE: /app/runtime/dbt-routes.json
       RAWBBIT_DBT_HOURLY_LOOKBACK_HOURS: ${RAWBBIT_DBT_HOURLY_LOOKBACK_HOURS:-3}
       RAWBBIT_DBT_DAILY_LOOKBACK_DAYS: ${RAWBBIT_DBT_DAILY_LOOKBACK_DAYS:-3}
       RAWBBIT_DBT_BACKFILL_CHUNK_HOURS: ${RAWBBIT_DBT_BACKFILL_CHUNK_HOURS:-24}
@@ -111,7 +113,7 @@ services:
     stop_grace_period: 30s
 
   mcp-server:
-    image: ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2
+    image: ${MCP_SERVER_IMAGE:-ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2}
     restart: unless-stopped
     logging: *default-logging
     environment:

@@ -2,6 +2,20 @@
 rawbbit_two_install_dir: /home/deploy/rawbbit-two
 rawbbit_two_root: /srv/rawbbit-two
 rawbbit_two_mcp_hostname: mcp.example.com
+rawbbit_two_mcp_path: /mcp
+rawbbit_two_mcp_image: ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2
+rawbbit_two_datasets: []
+rawbbit_two_clickhouse_database: analytics
+rawbbit_two_dbt_routing_enabled: false
+rawbbit_two_dbt_routes: []
+rawbbit_two_dbt_drain_timeout_seconds: 600
+# First upgrade is refused unless the ungated runner is already stopped and
+# ClickHouse has no dbt queries or unfinished mutations. This never stops it.
+rawbbit_two_dbt_bootstrap_stopped: false
+rawbbit_two_dbt_recover_gate: false
+# Explicit pre-routing rollback publishes an inert runner; ingestion stays gated.
+rawbbit_two_dbt_pre_routing_rollback: false
+rawbbit_two_clickhouse_http_port: 8123
 rawbbit_two_metabase_hostname: metabase.example.com
 rawbbit_two_clickhouse_hostname: clickhouse.example.com
 rawbbit_two_dozzle_hostname: logs-two.example.com

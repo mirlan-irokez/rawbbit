@@ -1,0 +1,9 @@
+---
+- name: Drain, publish, recreate and verify only dbt-runner in one locked host transaction
+  ansible.builtin.command:
+    argv: '{{ rawbbit_two_dbt_deploy_argv }}'
+  become: false
+  register: rawbbit_two_dbt_cutover
+  changed_when: true
+  # This process holds host flock itself, never a detached lock-holder. On any
+  # failure leave deploy.gate and the candidate directory for inspected recovery.

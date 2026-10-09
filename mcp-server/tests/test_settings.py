@@ -9,6 +9,7 @@ from rawbbit_mcp.settings import Settings
 def test_settings_parse_static_api_keys_and_auth_mode() -> None:
     settings = Settings(
         MCP_API_KEYS_JSON='{"user1":"token-1","user2":"token-2"}',
+        _env_file=None,
     )
 
     assert settings.api_keys_by_user == {"user1": "token-1", "user2": "token-2"}
@@ -16,7 +17,7 @@ def test_settings_parse_static_api_keys_and_auth_mode() -> None:
 
 
 def test_settings_use_jwt_mode_without_static_tokens() -> None:
-    settings = Settings(MCP_JWT_PUBLIC_KEY="public-key")
+    settings = Settings(MCP_JWT_PUBLIC_KEY="public-key", _env_file=None)
 
     assert settings.api_keys_by_user == {}
     assert settings.auth_mode == "jwt"
@@ -24,11 +25,11 @@ def test_settings_use_jwt_mode_without_static_tokens() -> None:
 
 def test_settings_fail_closed_without_auth() -> None:
     with pytest.raises(ValidationError, match="MCP authentication is required"):
-        Settings()
+        Settings(_env_file=None)
 
 
 def test_settings_allow_explicit_unauthenticated_mode() -> None:
-    settings = Settings(MCP_ALLOW_UNAUTHENTICATED=True)
+    settings = Settings(MCP_ALLOW_UNAUTHENTICATED=True, _env_file=None)
 
     assert settings.auth_mode == "none"
     assert settings.allow_unauthenticated is True
@@ -45,4 +46,4 @@ def test_settings_allow_explicit_unauthenticated_mode() -> None:
 )
 def test_settings_reject_invalid_static_api_keys_json(raw_value: str) -> None:
     with pytest.raises(ValidationError):
-        Settings(MCP_API_KEYS_JSON=raw_value)
+        Settings(MCP_API_KEYS_JSON=raw_value, _env_file=None)

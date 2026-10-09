@@ -2,27 +2,24 @@ from __future__ import annotations
 
 import hmac
 import logging
+import re
+import time
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Any
 
 import uvicorn
 from fastmcp import FastMCP
-from fastmcp.server.auth import JWTVerifier
+from fastmcp.server.middleware import CallNext, Middleware as FastMCPMiddleware, MiddlewareContext
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
+from starlette.routing import Mount
+from starlette.applications import Starlette
 
-from rawbbit_mcp.clickhouse import (
-    JSON_COLUMNS,
-    ClickHouseGateway,
-    bot_filter_sql,
-    build_funnel_sql,
-    checked_limit,
-    optional_filters_sql,
-    quote_string,
-    validate_readonly_sql,
-)
+from rawbbit_mcp.datasets import DatasetRegistry, RuntimeDataset, load_dataset_registry
 from rawbbit_mcp.settings import Settings, get_settings
+from rawbbit_mcp.tools import GatewayFactory, register_tools
 
 settings = get_settings()
 
@@ -32,7 +29,72 @@ logging.basicConfig(
 )
 logger = logging.getLogger("rawbbit_mcp")
 
-gateway = ClickHouseGateway(settings)
+
+class SafeToolAuditMiddleware(FastMCPMiddleware):
+    """Log tool execution metadata without arguments, SQL, results, or tokens."""
+
+    def __init__(self, dataset_id: str | None = None, auth_mode: str = "none") -> None:
+        self.dataset_id = dataset_id
+        self.auth_mode = auth_mode
+        self.endpoint_class = "scoped" if dataset_id is not None else "main"
+
+    async def on_call_tool(self, context: MiddlewareContext, call_next: CallNext):
+        params = context.message
+        arguments = getattr(params, "arguments", None) or {}
+        requested_dataset = arguments.get("dataset_id") if isinstance(arguments, dict) else None
+        if self.dataset_id is not None:
+            dataset_id = self.dataset_id
+        elif requested_dataset is None:
+            dataset_id = "default"
+        elif isinstance(requested_dataset, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,39}", requested_dataset):
+            dataset_id = requested_dataset
+        else:
+            dataset_id = "invalid"
+
+        actor = "unknown"
+        try:
+            from fastmcp.server.dependencies import get_http_request
+
+            request = get_http_request()
+            label = getattr(request.state, "authenticated_api_key_label", None)
+            if isinstance(label, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", label):
+                actor = label
+            elif self.auth_mode == "jwt":
+                actor = "jwt"
+            elif self.auth_mode == "none":
+                actor = "unauthenticated_dev"
+        except (LookupError, RuntimeError):
+            pass
+
+        requested_tool = getattr(params, "name", "unknown")
+        tool_name = (
+            requested_tool
+            if isinstance(requested_tool, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", requested_tool)
+            else "unknown"
+        )
+        started = time.perf_counter()
+        try:
+            result = await call_next(context)
+        except Exception:
+            logger.info(
+                "tool_call endpoint=%s dataset_id=%s tool=%s actor=%s result=exception duration_ms=%.2f",
+                self.endpoint_class,
+                dataset_id,
+                tool_name,
+                actor,
+                (time.perf_counter() - started) * 1000,
+            )
+            raise
+        logger.info(
+            "tool_call endpoint=%s dataset_id=%s tool=%s actor=%s result=%s duration_ms=%.2f",
+            self.endpoint_class,
+            dataset_id,
+            tool_name,
+            actor,
+            "error" if getattr(result, "is_error", False) else "ok",
+            (time.perf_counter() - started) * 1000,
+        )
+        return result
 
 
 def _build_auth(cfg: Settings):
@@ -40,6 +102,8 @@ def _build_auth(cfg: Settings):
         return None
 
     if cfg.jwt_jwks_uri:
+        from fastmcp.server.auth import JWTVerifier
+
         kwargs: dict[str, str] = {"jwks_uri": cfg.jwt_jwks_uri}
         if cfg.jwt_issuer:
             kwargs["issuer"] = cfg.jwt_issuer
@@ -48,6 +112,8 @@ def _build_auth(cfg: Settings):
         return JWTVerifier(**kwargs)
 
     if cfg.jwt_public_key:
+        from fastmcp.server.auth import JWTVerifier
+
         kwargs = {"public_key": cfg.jwt_public_key}
         if cfg.jwt_issuer:
             kwargs["issuer"] = cfg.jwt_issuer
@@ -69,26 +135,26 @@ def _extract_bearer_token(authorization_header: str | None) -> str | None:
     return normalized or None
 
 
-def _resolve_static_token_label(cfg: Settings, token: str | None) -> str | None:
+def _resolve_static_token_label(tokens: dict[str, str], token: str | None) -> str | None:
     if not token:
         return None
-    for label, candidate in cfg.api_keys_by_user.items():
+    for label, candidate in tokens.items():
         if hmac.compare_digest(candidate, token):
             return label
     return None
 
 
 class StaticBearerAuthMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, cfg: Settings) -> None:
+    def __init__(self, app, tokens: dict[str, str]) -> None:
         super().__init__(app)
-        self.cfg = cfg
+        self.tokens = tokens
 
     async def dispatch(self, request: Request, call_next) -> Response:
         if request.method == "OPTIONS":
             return await call_next(request)
 
         token = _extract_bearer_token(request.headers.get("authorization"))
-        label = _resolve_static_token_label(self.cfg, token)
+        label = _resolve_static_token_label(self.tokens, token)
         if label is None:
             return JSONResponse(
                 {"error": "Unauthorized"},
@@ -100,202 +166,73 @@ class StaticBearerAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def _build_http_middleware(cfg: Settings) -> list[Middleware]:
-    if cfg.auth_mode != "static_tokens":
+def _middleware_for_tokens(tokens: dict[str, str]) -> list[Middleware]:
+    if not tokens:
         return []
-    return [Middleware(StaticBearerAuthMiddleware, cfg=cfg)]
+    return [Middleware(StaticBearerAuthMiddleware, tokens=tokens)]
 
 
-mcp = FastMCP(settings.mcp_name, auth=_build_auth(settings))
-app = mcp.http_app(path=settings.mcp_path, middleware=_build_http_middleware(settings))
-
-
-@mcp.tool
-def healthcheck() -> dict[str, Any]:
-    """Check that the MCP server can reach ClickHouse."""
-    rows = gateway.query_rows("SELECT 1 AS ok")
-    return {
-        "status": "ok" if rows and rows[0].get("ok") == 1 else "unknown",
-        "clickhouse_table": settings.table_ref,
-    }
-
-
-@mcp.tool
-def table_overview(exclude_bots: bool = True) -> list[dict[str, Any]]:
-    """Summarize the configured Rawbbit ClickHouse events table."""
-    sql = f"""
-    SELECT
-      count() AS events,
-      uniqExact(app_id) AS apps,
-      uniqExact(event_name) AS event_names,
-      uniqExact(coalesce(nullIf(user_id, ''), user_pseudo_id)) AS actors,
-      min(event_time) AS first_event_time,
-      max(event_time) AS last_event_time
-    FROM {settings.table_ref}
-    WHERE event_time IS NOT NULL
-    {bot_filter_sql(settings, exclude_bots)}
-    """
-    return gateway.query_rows(sql)
-
-
-@mcp.tool
-def list_event_names(
-    app_id: str | None = None,
-    environment: str | None = "prod",
-    limit: int = 100,
-    exclude_bots: bool = True,
-) -> list[dict[str, Any]]:
-    """List event names with counts and observed time ranges."""
-    row_limit = checked_limit(limit, settings.max_query_rows)
-    sql = f"""
-    SELECT
-      event_name,
-      count() AS events,
-      uniqExact(coalesce(nullIf(user_id, ''), user_pseudo_id)) AS actors,
-      min(event_time) AS first_event_time,
-      max(event_time) AS last_event_time
-    FROM {settings.table_ref}
-    WHERE event_time IS NOT NULL
-    {optional_filters_sql(app_id=app_id, environment=environment)}
-    {bot_filter_sql(settings, exclude_bots)}
-    GROUP BY event_name
-    ORDER BY events DESC
-    LIMIT {row_limit}
-    """
-    return gateway.query_rows(sql)
-
-
-@mcp.tool
-def discover_json_keys(
-    json_column: str = "event_params_json",
-    event_name: str | None = None,
-    app_id: str | None = None,
-    environment: str | None = "prod",
-    limit: int = 100,
-    exclude_bots: bool = True,
-) -> list[dict[str, Any]]:
-    """Discover top-level JSON keys in one of the Rawbbit JSON string columns."""
-    if json_column not in JSON_COLUMNS:
-        return [{"error": f"json_column must be one of: {', '.join(sorted(JSON_COLUMNS))}"}]
-
-    row_limit = checked_limit(limit, settings.max_query_rows)
-    sql = f"""
-    SELECT
-      key,
-      count() AS rows_with_key
-    FROM
-    (
-      SELECT arrayJoin(JSONExtractKeys(if(empty(ifNull({json_column}, '')), '{{}}', {json_column}))) AS key
-      FROM {settings.table_ref}
-      WHERE event_time IS NOT NULL
-      {optional_filters_sql(app_id=app_id, environment=environment, event_name=event_name)}
-      {bot_filter_sql(settings, exclude_bots)}
+def create_app(
+    cfg: Settings,
+    registry: DatasetRegistry,
+    *,
+    gateway_factory: GatewayFactory | None = None,
+) -> tuple[FastMCP, Any]:
+    """Build the backward-compatible main endpoint and isolated scoped endpoints."""
+    main_server = FastMCP(cfg.mcp_name, auth=_build_auth(cfg))
+    main_server.add_middleware(SafeToolAuditMiddleware(auth_mode=cfg.auth_mode))
+    register_tools(main_server, cfg, registry, **({"gateway_factory": gateway_factory} if gateway_factory else {}))
+    main_http_app = main_server.http_app(
+        path=cfg.mcp_path,
+        middleware=_middleware_for_tokens(cfg.api_keys_by_user),
     )
-    GROUP BY key
-    ORDER BY rows_with_key DESC, key
-    LIMIT {row_limit}
-    """
-    return gateway.query_rows(sql)
+
+    if not registry.datasets:
+        return main_server, main_http_app
+
+    routes: list[Mount] = []
+    child_apps = []
+    for dataset in registry.datasets:
+        child_server = FastMCP(f"{cfg.mcp_name} dataset {dataset.id}")
+        child_server.add_middleware(
+            SafeToolAuditMiddleware(dataset_id=dataset.id, auth_mode="static_tokens")
+        )
+        register_tools(
+            child_server,
+            cfg,
+            registry,
+            scoped_dataset=dataset,
+            **({"gateway_factory": gateway_factory} if gateway_factory else {}),
+        )
+        child_app = child_server.http_app(
+            path=cfg.mcp_path,
+            middleware=_middleware_for_tokens(dataset.token_values),
+        )
+        mount_prefix = dataset.endpoint_path[: -len(cfg.mcp_path.rstrip("/") or "/mcp")].rstrip("/")
+        routes.append(Mount(mount_prefix, app=child_app))
+        child_apps.append(child_app)
+
+    # Starlette does not automatically enter nested FastMCP lifespans. Start each
+    # child session manager in the outer app so every mounted MCP route is ready.
+    @asynccontextmanager
+    async def lifespan(app):
+        async with AsyncExitStack() as stack:
+            for child_app in child_apps:
+                await stack.enter_async_context(child_app.lifespan(app))
+            await stack.enter_async_context(main_http_app.lifespan(app))
+            yield
+
+    routes.append(Mount("/", app=main_http_app))
+    return main_server, Starlette(routes=routes, lifespan=lifespan)
 
 
-@mcp.tool
-def sample_events(
-    event_name: str | None = None,
-    app_id: str | None = None,
-    environment: str | None = "prod",
-    limit: int = 20,
-    exclude_bots: bool = True,
-) -> list[dict[str, Any]]:
-    """Return recent raw event rows from the configured ClickHouse table."""
-    row_limit = checked_limit(limit, settings.max_sample_rows)
-    sql = f"""
-    SELECT
-      event_id,
-      app_id,
-      environment,
-      event_name,
-      event_time,
-      coalesce(nullIf(user_id, ''), user_pseudo_id) AS actor_id,
-      session_id,
-      platform,
-      event_params_json,
-      geo_json,
-      ingest_user_agent
-    FROM {settings.table_ref}
-    WHERE event_time IS NOT NULL
-    {optional_filters_sql(app_id=app_id, environment=environment, event_name=event_name)}
-    {bot_filter_sql(settings, exclude_bots)}
-    ORDER BY event_time DESC
-    LIMIT {row_limit}
-    """
-    return gateway.query_rows(sql)
-
-
-@mcp.tool
-def run_readonly_sql(sql: str, limit: int = 100) -> list[dict[str, Any]]:
-    """Run a guarded read-only ClickHouse query against Rawbbit analytics data."""
-    checked = validate_readonly_sql(sql)
-    if checked.lower().startswith(("select", "with")) and " limit " not in f" {checked.lower()} ":
-        checked = f"SELECT * FROM ({checked}) LIMIT {checked_limit(limit, settings.max_query_rows)}"
-    return gateway.query_rows(checked)
-
-
-@mcp.tool
-def calculate_dau(
-    start_date: str,
-    end_date: str,
-    app_id: str | None = None,
-    environment: str | None = "prod",
-    active_event_name: str | None = None,
-    exclude_bots: bool = True,
-) -> list[dict[str, Any]]:
-    """Calculate daily active users by actor_id for the configured events table."""
-    sql = f"""
-    SELECT
-      event_date,
-      uniqExact(coalesce(nullIf(user_id, ''), user_pseudo_id)) AS dau
-    FROM {settings.table_ref}
-    WHERE event_date BETWEEN toDate({quote_string(start_date)}) AND toDate({quote_string(end_date)})
-      AND event_time IS NOT NULL
-    {optional_filters_sql(app_id=app_id, environment=environment, event_name=active_event_name)}
-    {bot_filter_sql(settings, exclude_bots)}
-    GROUP BY event_date
-    ORDER BY event_date
-    """
-    return gateway.query_rows(sql)
-
-
-@mcp.tool
-def calculate_funnel(
-    steps: list[str],
-    start_date: str,
-    end_date: str,
-    app_id: str | None = None,
-    environment: str | None = "prod",
-    window_hours: int = 24,
-    exclude_bots: bool = True,
-) -> list[dict[str, Any]]:
-    """Calculate ordered user counts for an event-name funnel."""
-    clean_steps = [step.strip() for step in steps if step.strip()]
-    if not 2 <= len(clean_steps) <= 10:
-        return [{"error": "steps must contain between 2 and 10 event names"}]
-
-    sql = build_funnel_sql(
-        settings=settings,
-        steps=clean_steps,
-        start_date=start_date,
-        end_date=end_date,
-        app_id=app_id,
-        environment=environment,
-        window_hours=window_hours,
-        exclude_bots=exclude_bots,
-    )
-    return gateway.query_rows(sql)
+registry = load_dataset_registry(settings.mcp_datasets_file, settings)
+mcp, app = create_app(settings, registry)
 
 
 if __name__ == "__main__":
     logger.info(
-        "startup env=%s table=%s host=%s port=%s path=%s auth_mode=%s auth_enabled=%s",
+        "startup env=%s table=%s host=%s port=%s path=%s auth_mode=%s auth_enabled=%s enabled_datasets=%s",
         settings.env,
         settings.table_ref,
         settings.mcp_host,
@@ -303,9 +240,6 @@ if __name__ == "__main__":
         settings.mcp_path,
         settings.auth_mode,
         settings.auth_mode != "none",
+        len(registry.datasets),
     )
-    uvicorn.run(
-        app,
-        host=settings.mcp_host,
-        port=settings.mcp_port,
-    )
+    uvicorn.run(app, host=settings.mcp_host, port=settings.mcp_port)

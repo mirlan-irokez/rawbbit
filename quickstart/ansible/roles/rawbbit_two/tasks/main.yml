@@ -1,4 +1,7 @@
 ---
+- name: Validate dbt routing before any deployment writes
+  ansible.builtin.include_tasks: validate-dbt-routes.yml
+
 - name: Validate VM-two public configuration
   ansible.builtin.assert:
     that:
@@ -9,6 +12,13 @@
       - rawbbit_two_dozzle_hostname not in [rawbbit_two_mcp_hostname, rawbbit_two_metabase_hostname, rawbbit_two_clickhouse_hostname]
       - rawbbit_two_s3_endpoint != "https://s3.example.com"
       - rawbbit_two_raw_load_mode in ["legacy", "dbt"]
+      - rawbbit_two_datasets | type_debug == "list"
+      - rawbbit_two_mcp_path is match("^/[A-Za-z0-9_/-]+$")
+      - '"//" not in rawbbit_two_mcp_path'
+      - '".." not in rawbbit_two_mcp_path'
+      - not rawbbit_two_mcp_path.endswith("/")
+      - rawbbit_two_clickhouse_http_port | int >= 1
+      - rawbbit_two_clickhouse_http_port | int <= 65535
       - vault_rawbbit_two_clickhouse_admin_password != "change_me"
       - vault_rawbbit_two_clickhouse_mcp_password != "change_me"
       - vault_rawbbit_two_clickhouse_metabase_password != "change_me"
@@ -21,6 +31,103 @@
       - vault_rawbbit_two_mcp_api_keys | length > 0
       - "'change_me' not in (vault_rawbbit_two_mcp_api_keys | dict2items | map(attribute='value') | list)"
     fail_msg: Replace all VM-two example hostnames and Vault placeholders.
+  no_log: true
+
+- name: Validate VM-two dataset metadata
+  ansible.builtin.assert:
+    that:
+      - item.id is string
+      - item.id is match("^[a-z][a-z0-9_]{0,39}$")
+      - item.enabled is boolean
+      - item.mode in ["managed", "reference"]
+      - item.database is match("^[A-Za-z_][A-Za-z0-9_]*$")
+      # Preserve MCP metadata's existing reserved main-database boundary. dbt
+      # separately checks its resolved configured default in route validation.
+      - item.database != 'analytics'
+      - item.table | default("events") is match("^[A-Za-z_][A-Za-z0-9_]*$")
+      - item.mcp_user is match("^[A-Za-z_][A-Za-z0-9_]*$")
+      - item.mcp_user != "rawbbit_mcp"
+      - item.mcp_role is match("^[A-Za-z_][A-Za-z0-9_]*$")
+      - item.main_exposed | default(false) is boolean
+      - item.secret_ref is string
+      - item.secret_ref | length > 0
+      - item.create_table | default(false) is boolean
+      - item.mode != "reference" or not (item.create_table | default(false))
+    fail_msg: Dataset metadata is invalid; inspect only non-secret IDs, names, modes, and limit values.
+  loop: "{{ rawbbit_two_datasets }}"
+  loop_control:
+    label: "{{ item.id | default('invalid-dataset') }}"
+  no_log: true
+
+- name: Reject duplicate VM-two dataset IDs
+  ansible.builtin.assert:
+    that:
+      - >-
+        (rawbbit_two_datasets | map(attribute='id') | list | unique | list | length)
+        == (rawbbit_two_datasets | length)
+    fail_msg: Dataset IDs must be unique.
+
+- name: Check whether a prior dataset ownership journal exists
+  ansible.builtin.stat:
+    path: "{{ rawbbit_two_root }}/clickhouse/datasets-ownership.json"
+  register: rawbbit_two_dataset_journal_stat
+  become: true
+  no_log: true
+
+- name: Determine whether dataset isolation state must be retained
+  ansible.builtin.set_fact:
+    rawbbit_two_dataset_preflight_required: >-
+      {{ (rawbbit_two_datasets | length > 0) or
+      (rawbbit_two_dataset_journal_stat.stat.exists | default(false)) }}
+  no_log: true
+
+- name: Require a released MCP image before enabling dataset endpoints
+  ansible.builtin.assert:
+    that:
+      - rawbbit_two_mcp_image != "ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2"
+      - rawbbit_two_mcp_image is match("^[^:]+:(?:[1-9][0-9]*\\.[0-9]+\\.[0-9]+|0\\.[1-9][0-9]*\\.[0-9]+|0\\.0\\.(?:[3-9]|[1-9][0-9]+))$")
+    fail_msg: >-
+      Dataset routes require a published, tested, versioned MCP image newer than
+      0.0.2. Set rawbbit_two_mcp_image to a strictly newer image after release; do not use
+      latest or a missing tag.
+  when: rawbbit_two_datasets | selectattr('enabled') | list | length > 0
+
+- name: Validate enabled VM-two dataset secret references and values
+  ansible.builtin.assert:
+    that:
+      - item.secret_ref in vault_rawbbit_two_dataset_credentials
+      - vault_rawbbit_two_dataset_credentials[item.secret_ref].mcp_password is string
+      - vault_rawbbit_two_dataset_credentials[item.secret_ref].mcp_password | length > 0
+      - vault_rawbbit_two_dataset_credentials[item.secret_ref].bearer_tokens is mapping
+      - vault_rawbbit_two_dataset_credentials[item.secret_ref].bearer_tokens | length > 0
+      - >-
+        'change_me' not in
+        (vault_rawbbit_two_dataset_credentials[item.secret_ref].mcp_password ~ ' ' ~
+        (vault_rawbbit_two_dataset_credentials[item.secret_ref].bearer_tokens.values() | join(' ')))
+    fail_msg: Enabled dataset secret references are missing or still contain example values.
+  loop: "{{ rawbbit_two_datasets | selectattr('enabled') | list }}"
+  loop_control:
+    label: "{{ item.id }}"
+  no_log: true
+
+- name: Collect scoped MCP tokens for collision validation
+  ansible.builtin.set_fact:
+    rawbbit_two_scoped_mcp_tokens: >-
+      {{ (rawbbit_two_scoped_mcp_tokens | default([])) +
+      (vault_rawbbit_two_dataset_credentials[item.secret_ref].bearer_tokens.values() | list) }}
+  loop: "{{ rawbbit_two_datasets | selectattr('enabled') | list }}"
+  loop_control:
+    label: "{{ item.id }}"
+  no_log: true
+
+- name: Reject duplicate scoped MCP tokens and main-token reuse
+  ansible.builtin.assert:
+    that:
+      - rawbbit_two_scoped_mcp_tokens | default([]) | length == rawbbit_two_scoped_mcp_tokens | default([]) | unique | list | length
+      - >-
+        (rawbbit_two_scoped_mcp_tokens | default([]) |
+        intersect(vault_rawbbit_two_mcp_api_keys.values() | list) | length) == 0
+    fail_msg: Main and scoped MCP bearer token values must be unique.
   no_log: true
 
 - name: Select the AWS CLI architecture
@@ -153,6 +260,36 @@
     - clickhouse/users.d
     - postgres/initdb.d
 
+- name: Create a unique private candidate directory without changing active config
+  ansible.builtin.tempfile:
+    state: directory
+    path: '{{ rawbbit_two_install_dir }}'
+    prefix: .dbt-deploy-
+  register: rawbbit_two_stage
+  become: false
+
+- name: Stage Compose artifacts for validation and drained publication
+  ansible.builtin.copy:
+    src: '{{ playbook_dir }}/../vm_rawbbit_two/{{ item }}'
+    dest: '{{ rawbbit_two_stage.path }}/{{ item }}'
+    mode: '0644'
+  loop:
+    - docker-compose.yml
+    - docker-compose.dozzle.yml
+    - docker-compose.datasets.yml
+  become: false
+
+- name: Record complete desired overlays for staged and active actions
+  ansible.builtin.set_fact:
+    rawbbit_two_active_compose_files: >-
+      {{ ['docker-compose.yml', 'docker-compose.dozzle.yml'] +
+      (['docker-compose.datasets.yml'] if rawbbit_two_datasets | selectattr('enabled') | list | length > 0 else []) }}
+
+- name: Record staged overlay paths
+  ansible.builtin.set_fact:
+    rawbbit_two_candidate_compose_files: >-
+      {{ rawbbit_two_active_compose_files | map('regex_replace', '^', rawbbit_two_stage.path ~ '/') | list }}
+
 - name: Copy required VM-two runtime artifacts
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../vm_rawbbit_two/{{ item.path }}"
@@ -160,11 +297,12 @@
     owner: "{{ rawbbit_deploy_user }}"
     group: "{{ rawbbit_deploy_user }}"
     mode: "{{ item.mode }}"
+    # Running ClickHouse bind sources must not be replaced before drain. Seed
+    # missing first-install artifacts, then fail explicitly on existing drift.
+    force: '{{ not item.path.startswith("clickhouse/") }}'
   loop:
-    - path: docker-compose.yml
-      mode: "0644"
-    - path: docker-compose.dozzle.yml
-      mode: "0644"
+    - path: deploy-dbt-runner.py
+      mode: "0755"
     - path: bootstrap-host-dirs.sh
       mode: "0755"
     - path: clickhouse/config.d/raw-s3-named-collection.xml
@@ -180,17 +318,56 @@
     - path: postgres/initdb.d/01_metabase_database.sh
       mode: "0755"
 
-- name: Copy legacy loader artifacts only in legacy mode
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../vm_rawbbit_two/{{ item }}"
-    dest: "{{ rawbbit_two_install_dir }}/{{ item }}"
-    owner: "{{ rawbbit_deploy_user }}"
-    group: "{{ rawbbit_deploy_user }}"
-    mode: "0755"
+- name: Inspect retained warehouse bind-source artifacts without changing them
+  ansible.builtin.stat:
+    path: '{{ rawbbit_two_install_dir }}/{{ item }}'
+    checksum_algorithm: sha256
   loop:
-    - clickhouse/load_events_hourly.sh
-    - install-hourly-loader-cron.sh
-  when: rawbbit_two_raw_load_mode == "legacy"
+    - clickhouse/config.d/raw-s3-named-collection.xml
+    - 'clickhouse/config.d/{{ rawbbit_two_clickhouse_config_profile }}'
+    - 'clickhouse/users.d/{{ rawbbit_two_clickhouse_users_profile }}'
+    - clickhouse/initdb.d/02_service_users.sh
+    - clickhouse/schema_analytics_events.sql
+  register: rawbbit_two_warehouse_artifact_stats
+
+- name: Refuse warehouse artifact changes outside a separately reviewed warehouse drain
+  ansible.builtin.assert:
+    that:
+      - item.stat.checksum == lookup('ansible.builtin.file', playbook_dir ~ '/../vm_rawbbit_two/' ~ item.item, rstrip=False) | hash('sha256')
+    fail_msg: >-
+      Existing ClickHouse artifacts differ from the candidate. This runner-only
+      deployment never overwrites/restarts the running warehouse. Reconcile the
+      warehouse in a separate operator-reviewed, shared-lock maintenance window.
+  loop: '{{ rawbbit_two_warehouse_artifact_stats.results }}'
+  loop_control:
+    label: '{{ item.item }}'
+
+- name: Create root-owned ClickHouse provisioning directory
+  ansible.builtin.file:
+    path: "{{ rawbbit_two_root }}/clickhouse"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: rawbbit_two_dataset_preflight_required | bool
+
+- name: Install privileged dataset provisioner and canonical schema
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../vm_rawbbit_two/clickhouse/{{ item.src }}"
+    dest: "{{ rawbbit_two_root }}/clickhouse/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - src: provision_datasets.py
+      dest: provision_datasets.py
+      mode: "0755"
+    - src: schema_analytics_events.sql
+      dest: schema_analytics_events.sql
+      mode: "0644"
+  become: true
+  when: rawbbit_two_dataset_preflight_required | bool
 
 - name: Remove files left by previous broad copies
   ansible.builtin.file:
@@ -216,20 +393,30 @@
   community.docker.docker_image_build:
     name: "{{ rawbbit_two_dbt_runner_image }}"
     path: "{{ rawbbit_two_dbt_build_context }}"
+    rebuild: always
     args:
       DBT_UID: "{{ rawbbit_two_deploy_uid.stdout }}"
       DBT_GID: "{{ rawbbit_two_deploy_gid.stdout }}"
   become: false
   when: rawbbit_two_dbt_runner_image == "rawbbit-dbt-runner:local"
 
-- name: Render private VM-two environment
+- name: Stage private VM-two environment without changing runner-observed config
   ansible.builtin.template:
     src: env.j2
-    dest: "{{ rawbbit_two_install_dir }}/.env"
+    dest: "{{ rawbbit_two_stage.path }}/.env"
     owner: "{{ rawbbit_deploy_user }}"
     group: "{{ rawbbit_deploy_user }}"
     mode: "0600"
+  register: rawbbit_two_env_render_result
   no_log: true
+
+- name: Stage non-secret resolved route snapshot when routing is explicitly enabled
+  ansible.builtin.template:
+    src: dbt-routes.json.j2
+    dest: '{{ rawbbit_two_stage.path }}/dbt-routes.json'
+    mode: '0644'
+  become: false
+  when: rawbbit_two_dbt_routing_enabled
 
 - name: Render VM-two Caddy routes including Dozzle
   ansible.builtin.template:
@@ -248,6 +435,26 @@
     RAWBBIT_TWO_RUNTIME_OWNER: "{{ rawbbit_deploy_user }}"
   changed_when: false
 
+- name: Assemble runner transaction arguments with explicit complete overlay set
+  ansible.builtin.set_fact:
+    rawbbit_two_dbt_deploy_argv: >-
+      {{ ['/usr/bin/python3', rawbbit_two_install_dir ~ '/deploy-dbt-runner.py',
+      '--install-dir', rawbbit_two_install_dir, '--stage-dir', rawbbit_two_stage.path,
+      '--runtime-dir', rawbbit_two_root ~ '/dbt',
+      '--drain-timeout', rawbbit_two_dbt_drain_timeout_seconds | string] +
+      (rawbbit_two_active_compose_files | map('regex_replace', '^', '--compose-file=') | list) +
+      (['--bootstrap-stopped'] if rawbbit_two_dbt_bootstrap_stopped else []) +
+      (['--recover-gate'] if rawbbit_two_dbt_recover_gate else []) +
+      (['--remove-dataset-overlay'] if rawbbit_two_datasets | selectattr('enabled') | list | length == 0 else []) +
+      (['--pre-routing-rollback'] if rawbbit_two_dbt_pre_routing_rollback else []) }}
+
+- name: Validate staged routing and Compose contract before provisioning writes
+  ansible.builtin.command:
+    argv: '{{ rawbbit_two_dbt_deploy_argv + ["--validate-only"] }}'
+  become: false
+  changed_when: false
+  no_log: true
+
 - name: Configure authenticated Dozzle for VM two
   ansible.builtin.include_role:
     name: dozzle
@@ -259,15 +466,110 @@
     dozzle_password: "{{ vault_rawbbit_two_dozzle_password }}"
     dozzle_users_revision: "{{ rawbbit_two_dozzle_users_revision }}"
 
-- name: Validate VM-two Compose configuration with Dozzle
+- name: Record enabled dataset entries without their secret values
+  ansible.builtin.set_fact:
+    rawbbit_two_enabled_datasets: "{{ rawbbit_two_datasets | selectattr('enabled') | list }}"
+
+- name: Render protected provisioning registry
+  ansible.builtin.template:
+    src: datasets-provision.json.j2
+    dest: "{{ rawbbit_two_root }}/clickhouse/datasets-provision.json"
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+  no_log: true
+  when: rawbbit_two_dataset_preflight_required | bool
+
+- name: Stage protected runtime registry before provisioning
+  ansible.builtin.template:
+    src: datasets-runtime.json.j2
+    dest: "{{ rawbbit_two_install_dir }}/datasets-runtime.json.stage"
+    owner: "{{ rawbbit_deploy_user }}"
+    group: "{{ rawbbit_deploy_user }}"
+    mode: "0600"
+  no_log: true
+  when: rawbbit_two_dataset_preflight_required | bool
+
+- name: Remove unneeded staged config when no dataset preflight is required
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop:
+    - path: "{{ rawbbit_two_root }}/clickhouse/datasets-provision.json"
+    - path: "{{ rawbbit_two_install_dir }}/datasets-runtime.json.stage"
+  become: true
+  no_log: true
+  when: not (rawbbit_two_dataset_preflight_required | bool)
+
+- name: Record whether an old runtime registry must be removed after MCP recreation
+  ansible.builtin.stat:
+    path: "{{ rawbbit_two_install_dir }}/datasets-runtime.json"
+  register: rawbbit_two_active_runtime_file
+
+- name: Read the current VM-two MCP container ID
   ansible.builtin.command:
     argv:
       - docker
       - compose
+      - --project-directory
+      - '{{ rawbbit_two_install_dir }}'
+      - --env-file
+      - '{{ rawbbit_two_stage.path }}/.env'
       - -f
-      - docker-compose.yml
+      - '{{ rawbbit_two_stage.path }}/docker-compose.yml'
       - -f
-      - docker-compose.dozzle.yml
+      - '{{ rawbbit_two_stage.path }}/docker-compose.dozzle.yml'
+      - ps
+      - -q
+      - mcp-server
+  args:
+    chdir: "{{ rawbbit_two_install_dir }}"
+  register: rawbbit_two_mcp_container_id
+  changed_when: false
+  no_log: true
+
+- name: Read the image currently serving the MCP endpoint
+  ansible.builtin.command:
+    argv:
+      - docker
+      - inspect
+      - --format
+      - "{{ '{{' ~ '.Config.Image' ~ '}}' }}"
+      - "{{ rawbbit_two_mcp_container_id.stdout | trim }}"
+  args:
+    chdir: "{{ rawbbit_two_install_dir }}"
+  register: rawbbit_two_running_mcp_image
+  changed_when: false
+  no_log: true
+  when: rawbbit_two_mcp_container_id.stdout | trim | length > 0
+
+- name: Compare only the MCP service environment against its running container
+  ansible.builtin.command:
+    argv: '{{ rawbbit_two_dbt_deploy_argv + ["--inspect-mcp-env"] }}'
+  become: false
+  changed_when: false
+  register: rawbbit_two_mcp_environment_comparison
+  no_log: true
+
+- name: Record service-specific MCP image and environment changes, ignoring routing-only changes
+  ansible.builtin.set_fact:
+    rawbbit_two_mcp_image_changed: >-
+      {{ (rawbbit_two_running_mcp_image.stdout | default('') | trim) != rawbbit_two_mcp_image }}
+    rawbbit_two_mcp_environment_changed: '{{ (rawbbit_two_mcp_environment_comparison.stdout | from_json).changed }}'
+  no_log: true
+
+- name: Validate base VM-two Compose configuration before starting ClickHouse
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - --project-directory
+      - '{{ rawbbit_two_install_dir }}'
+      - --env-file
+      - '{{ rawbbit_two_stage.path }}/.env'
+      - -f
+      - '{{ rawbbit_two_stage.path }}/docker-compose.yml'
       - config
       - --quiet
   args:
@@ -276,36 +578,28 @@
   changed_when: false
   no_log: true
 
-- name: Pull and start VM-two services with Dozzle
+- name: Start or preserve ClickHouse before provisioning other services
   community.docker.docker_compose_v2:
     project_src: "{{ rawbbit_two_install_dir }}"
-    files:
-      - docker-compose.yml
-      - docker-compose.dozzle.yml
+    files: '{{ rawbbit_two_candidate_compose_files }}'
+    env_files:
+      - '{{ rawbbit_two_stage.path }}/.env'
+    services:
+      - clickhouse
+    dependencies: false
     build: never
-    pull: >-
-      {{
-        'missing'
-        if rawbbit_two_dbt_runner_image == 'rawbbit-dbt-runner:local'
-        else 'always'
-      }}
+    pull: missing
     state: present
+    # Never restart a running warehouse while an old runner is being drained.
+    recreate: never
     wait: true
     wait_timeout: 600
   become: false
   no_log: true
 
-- name: Install legacy hourly loader only in legacy mode
-  ansible.builtin.command: ./install-hourly-loader-cron.sh
-  args:
-    chdir: "{{ rawbbit_two_install_dir }}"
-  become: false
-  changed_when: false
-  when: rawbbit_two_raw_load_mode == "legacy"
-
-- name: Wait for local ClickHouse health
+- name: Wait for local ClickHouse health before dataset preflight
   ansible.builtin.uri:
-    url: http://127.0.0.1:8123/ping
+    url: "http://127.0.0.1:{{ rawbbit_two_clickhouse_http_port }}/ping"
     return_content: true
     status_code: 200
   register: rawbbit_two_clickhouse_health
@@ -314,6 +608,154 @@
   until:
     - rawbbit_two_clickhouse_health.status == 200
     - rawbbit_two_clickhouse_health.content | trim == "Ok."
+
+- name: Preflight dataset ownership and main-user isolation before mutation
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - "{{ rawbbit_two_root }}/clickhouse/provision_datasets.py"
+      - --config
+      - "{{ rawbbit_two_root }}/clickhouse/datasets-provision.json"
+      - --runtime-config
+      - "{{ rawbbit_two_install_dir }}/datasets-runtime.json.stage"
+      - --schema
+      - "{{ rawbbit_two_root }}/clickhouse/schema_analytics_events.sql"
+      - --journal
+      - "{{ rawbbit_two_root }}/clickhouse/datasets-ownership.json"
+      - --preflight-only
+  args:
+    chdir: "{{ rawbbit_two_root }}/clickhouse"
+  become: true
+  changed_when: false
+  no_log: true
+  when: rawbbit_two_dataset_preflight_required | bool
+
+- name: Reconcile managed datasets and retain main-access targets before activation
+  when: rawbbit_two_dataset_preflight_required | bool
+  block:
+    - name: Apply idempotent dataset provisioning
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - "{{ rawbbit_two_root }}/clickhouse/provision_datasets.py"
+          - --config
+          - "{{ rawbbit_two_root }}/clickhouse/datasets-provision.json"
+          - --runtime-config
+          - "{{ rawbbit_two_install_dir }}/datasets-runtime.json.stage"
+          - --schema
+          - "{{ rawbbit_two_root }}/clickhouse/schema_analytics_events.sql"
+          - --journal
+          - "{{ rawbbit_two_root }}/clickhouse/datasets-ownership.json"
+      args:
+        chdir: "{{ rawbbit_two_root }}/clickhouse"
+      become: true
+      register: rawbbit_two_dataset_provision_result
+      changed_when: "'configuration reconciled' in rawbbit_two_dataset_provision_result.stdout"
+      no_log: true
+
+  rescue:
+    - name: Stop MCP after an incomplete ClickHouse reconciliation
+      community.docker.docker_compose_v2:
+        project_src: "{{ rawbbit_two_install_dir }}"
+        files:
+          - docker-compose.yml
+          - docker-compose.dozzle.yml
+          - docker-compose.datasets.yml
+        services:
+          - mcp-server
+        state: stopped
+      become: false
+      no_log: true
+
+    - name: Abort before publishing a partial dataset runtime registry
+      ansible.builtin.fail:
+        msg: >-
+          Dataset provisioning failed. The previous runtime file was not
+          activated and MCP was stopped for credential safety. Inspect the
+          protected ownership journal and follow the recovery procedure; no
+          dataset data or unrelated ClickHouse entities were deleted.
+
+- name: Activate runner before dataset publication, outside MCP credential rescues
+  ansible.builtin.include_tasks: activate-dbt-runner.yml
+
+- name: Activate and deploy the validated dataset runtime configuration
+  when: rawbbit_two_enabled_datasets | length > 0
+  block:
+    - name: Apply dataset activation and Compose tasks
+      ansible.builtin.include_tasks: activate-datasets.yml
+
+  rescue:
+    - name: Stop MCP after a failed dataset activation or restart
+      community.docker.docker_compose_v2:
+        project_src: "{{ rawbbit_two_install_dir }}"
+        files:
+          - docker-compose.yml
+          - docker-compose.dozzle.yml
+          - docker-compose.datasets.yml
+        services:
+          - mcp-server
+        state: stopped
+      become: false
+      no_log: true
+
+    - name: Report failed dataset activation without exposing config
+      ansible.builtin.fail:
+        msg: >-
+          Dataset runtime activation or MCP recreation failed. MCP was stopped
+          so it cannot advertise stale credentials. Inspect the protected
+          runtime file and ownership journal; do not delete ClickHouse data.
+
+
+- name: Deploy without dataset registry and revoke the old MCP runtime
+  when: rawbbit_two_enabled_datasets | length == 0
+  block:
+    - name: Apply empty-registry Compose tasks
+      ansible.builtin.include_tasks: activate-empty-datasets.yml
+
+  rescue:
+    - name: Stop MCP after a failed registry removal
+      community.docker.docker_compose_v2:
+        project_src: "{{ rawbbit_two_install_dir }}"
+        files:
+          - docker-compose.yml
+          - docker-compose.dozzle.yml
+        services:
+          - mcp-server
+        state: stopped
+      become: false
+      no_log: true
+
+    - name: Report failed registry removal without exposing config
+      ansible.builtin.fail:
+        msg: >-
+          Removing dataset endpoints failed; MCP was stopped for safety. Keep
+          the protected runtime file until the Compose configuration is
+          reconciled, and preserve all ClickHouse data and access entities.
+
+
+- name: Restore legacy loader artifacts only after the drained cutover
+  ansible.builtin.copy:
+    src: '{{ playbook_dir }}/../vm_rawbbit_two/{{ item }}'
+    dest: '{{ rawbbit_two_install_dir }}/{{ item }}'
+    owner: '{{ rawbbit_deploy_user }}'
+    group: '{{ rawbbit_deploy_user }}'
+    mode: '0755'
+  loop:
+    - clickhouse/load_events_hourly.sh
+    - install-hourly-loader-cron.sh
+  when:
+    - rawbbit_two_raw_load_mode == 'legacy'
+    - not rawbbit_two_dbt_pre_routing_rollback
+
+- name: Install legacy hourly loader only in legacy mode
+  ansible.builtin.command: ./install-hourly-loader-cron.sh
+  args:
+    chdir: "{{ rawbbit_two_install_dir }}"
+  become: false
+  changed_when: false
+  when:
+    - rawbbit_two_raw_load_mode == 'legacy'
+    - not rawbbit_two_dbt_pre_routing_rollback
 
 - name: Wait for Metabase HTTPS route
   ansible.builtin.uri:
@@ -329,7 +771,7 @@
 
 - name: Verify authenticated Rawbbit MCP initialization
   ansible.builtin.uri:
-    url: "https://{{ rawbbit_two_mcp_hostname }}/mcp"
+    url: "https://{{ rawbbit_two_mcp_hostname }}{{ rawbbit_two_mcp_path }}"
     method: POST
     headers:
       Authorization: >-
@@ -351,45 +793,95 @@
     validate_certs: "{{ rawbbit_two_validate_tls }}"
   no_log: true
 
-- name: Verify dbt connection
-  ansible.builtin.command:
-    argv:
-      - docker
-      - compose
-      - exec
-      - -T
-      - dbt-runner
-      - dbt
-      - debug
-      - --project-dir
-      - /app
-      - --profiles-dir
-      - /app
-  args:
-    chdir: "{{ rawbbit_two_install_dir }}"
-  become: false
-  changed_when: false
+- name: Verify each scoped MCP endpoint accepts only its scoped token
+  ansible.builtin.uri:
+    url: "https://{{ rawbbit_two_mcp_hostname }}/datasets/{{ item.id }}{{ rawbbit_two_mcp_path }}"
+    method: POST
+    headers:
+      Authorization: >-
+        Bearer {{ (vault_rawbbit_two_dataset_credentials[item.secret_ref].bearer_tokens | dict2items | first).value }}
+      Accept: application/json, text/event-stream
+      Content-Type: application/json
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      id: 2
+      method: initialize
+      params:
+        protocolVersion: "2025-03-26"
+        capabilities: {}
+        clientInfo:
+          name: ansible-scoped-healthcheck
+          version: "1.0"
+    status_code: 200
+    validate_certs: "{{ rawbbit_two_validate_tls }}"
+  loop: "{{ rawbbit_two_enabled_datasets }}"
+  loop_control:
+    label: "{{ item.id }}"
   no_log: true
+  when: rawbbit_two_enabled_datasets | length > 0
 
-- name: Verify dbt project parsing
-  ansible.builtin.command:
-    argv:
-      - docker
-      - compose
-      - exec
-      - -T
-      - dbt-runner
-      - dbt
-      - parse
-      - --project-dir
-      - /app
-      - --profiles-dir
-      - /app
-  args:
-    chdir: "{{ rawbbit_two_install_dir }}"
-  become: false
-  changed_when: false
+- name: Verify the main MCP token is rejected by each scoped endpoint
+  ansible.builtin.uri:
+    url: "https://{{ rawbbit_two_mcp_hostname }}/datasets/{{ item.id }}{{ rawbbit_two_mcp_path }}"
+    method: POST
+    headers:
+      Authorization: >-
+        Bearer {{ (vault_rawbbit_two_mcp_api_keys | dict2items | first).value }}
+      Accept: application/json, text/event-stream
+      Content-Type: application/json
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      id: 3
+      method: initialize
+      params:
+        protocolVersion: "2025-03-26"
+        capabilities: {}
+        clientInfo:
+          name: ansible-main-token-rejection-check
+          version: "1.0"
+    status_code: 401
+    validate_certs: "{{ rawbbit_two_validate_tls }}"
+  loop: "{{ rawbbit_two_enabled_datasets }}"
+  loop_control:
+    label: "{{ item.id }}"
   no_log: true
+  when: rawbbit_two_enabled_datasets | length > 0
+
+- name: Verify scoped MCP tokens are rejected by the main endpoint
+  ansible.builtin.uri:
+    url: "https://{{ rawbbit_two_mcp_hostname }}{{ rawbbit_two_mcp_path }}"
+    method: POST
+    headers:
+      Authorization: >-
+        Bearer {{ (vault_rawbbit_two_dataset_credentials[item.secret_ref].bearer_tokens | dict2items | first).value }}
+      Accept: application/json, text/event-stream
+      Content-Type: application/json
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      id: 4
+      method: initialize
+      params:
+        protocolVersion: "2025-03-26"
+        capabilities: {}
+        clientInfo:
+          name: ansible-scoped-token-rejection-check
+          version: "1.0"
+    status_code: 401
+    validate_certs: "{{ rawbbit_two_validate_tls }}"
+  loop: "{{ rawbbit_two_enabled_datasets }}"
+  loop_control:
+    label: "{{ item.id }}"
+  no_log: true
+  when: rawbbit_two_enabled_datasets | length > 0
+
+- name: Remove private staging artifacts only after successful deployment
+  ansible.builtin.file:
+    path: '{{ rawbbit_two_stage.path }}'
+    state: absent
+  become: false
 
 - name: Verify authenticated Dozzle endpoint is reachable
   ansible.builtin.uri:

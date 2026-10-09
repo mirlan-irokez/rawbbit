@@ -1,0 +1,63 @@
+---
+- name: Validate routing switches and resolved default before any deployment writes
+  ansible.builtin.assert:
+    that:
+      - rawbbit_two_dbt_routing_enabled is boolean
+      - rawbbit_two_dbt_routes | type_debug == 'list'
+      - rawbbit_two_clickhouse_database is string
+      - rawbbit_two_clickhouse_database is match('^[A-Za-z_][A-Za-z0-9_]{0,127}$')
+      - not rawbbit_two_dbt_routing_enabled or rawbbit_two_raw_load_mode == 'dbt'
+      - rawbbit_two_dbt_drain_timeout_seconds | int > 0
+      - rawbbit_two_dbt_bootstrap_stopped is boolean
+      - rawbbit_two_dbt_recover_gate is boolean
+      - rawbbit_two_dbt_pre_routing_rollback is boolean
+      - not rawbbit_two_dbt_pre_routing_rollback or not rawbbit_two_dbt_routing_enabled
+    fail_msg: Invalid dbt routing configuration; no deployment artifacts have been changed.
+
+- name: Initialize resolved dbt route snapshot
+  ansible.builtin.set_fact:
+    rawbbit_two_resolved_dbt_routes: []
+
+- name: Validate each route metadata reference independently of MCP enablement
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.keys() | list | difference(['app_id', 'dataset_id', 'enabled']) | length == 0
+      - item.enabled | default(true) is boolean
+      - item.app_id is string
+      - item.app_id is match('^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')
+      - item.dataset_id is string
+      - rawbbit_two_datasets | selectattr('id', 'equalto', item.dataset_id) | list | length == 1
+    fail_msg: A dbt route has unsafe fields or an unresolved dataset reference.
+  loop: '{{ rawbbit_two_dbt_routes }}'
+  when: rawbbit_two_dbt_routing_enabled
+
+- name: Resolve only non-secret dataset metadata into dbt routes
+  ansible.builtin.set_fact:
+    rawbbit_two_resolved_dbt_routes: >-
+      {{ rawbbit_two_resolved_dbt_routes + [{'app_id': item.app_id,
+      'dataset_id': item.dataset_id, 'database': dataset.database,
+      'table': dataset.table | default('events')}] }}
+  vars:
+    dataset: "{{ rawbbit_two_datasets | selectattr('id', 'equalto', item.dataset_id) | first }}"
+  loop: '{{ rawbbit_two_dbt_routes }}'
+  when:
+    - rawbbit_two_dbt_routing_enabled
+    - item.enabled | default(true)
+
+- name: Reject unsupported targets and configured default collisions
+  ansible.builtin.assert:
+    that:
+      - item.table == 'events'
+      - item.database is string
+      - item.database is match('^[A-Za-z_][A-Za-z0-9_]{0,127}$')
+      - item.database != rawbbit_two_clickhouse_database
+    fail_msg: Route targets must be distinct non-default databases with table events.
+  loop: '{{ rawbbit_two_resolved_dbt_routes }}'
+
+- name: Reject duplicate apps and conflicting route targets
+  ansible.builtin.assert:
+    that:
+      - rawbbit_two_resolved_dbt_routes | map(attribute='app_id') | unique | list | length == rawbbit_two_resolved_dbt_routes | length
+      - rawbbit_two_resolved_dbt_routes | map(attribute='database') | unique | list | length == rawbbit_two_resolved_dbt_routes | length
+    fail_msg: Each app and destination may occur only once in the route snapshot.

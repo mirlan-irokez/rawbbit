@@ -71,6 +71,8 @@ This repository contains the public game-telemetry ingestion-to-analytics path:
 - `mcp-server/` — Rawbbit MCP server, MCP client setup, and combined MCP + Metabase deployment guide
 - AI agents and MCP clients such as Codex, OpenCode, and OpenClaw can connect to the Rawbbit MCP server endpoint for read-only analytics exploration
 - `metabase/` — optional standalone Metabase deployment guide
+- `sdk/rawbbit-unity/` — copy-in Unity C# SDK source, generic game-adapter template, and Editor/PlayMode test sources; Unity compilation and Android/iOS player/device validation are pending
+- `sdk/rawbbit-browser-game/` — self-contained browser-game JavaScript SDK source with a durable queue, consent integration guide, tests, and a copy-in game-adapter template. The source builds without another SDK folder; the separate `@rawbbit/browser-game` npm package remains private and unpublished.
 - `sqlmesh_project/` — optional [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) project for the BigQuery external-table path
 
 ## Architecture
@@ -168,6 +170,8 @@ clickhouse/        Main ClickHouse query/loading path
 dbt_project/       Scheduled ClickHouse ingestion project
 mcp-server/        Rawbbit MCP server and optional Metabase deploy path
 metabase/          Metabase OSS ver. deploy instructions
+sdk/rawbbit-unity/ Copy-in Unity SDK source, integration guide, and tests
+sdk/rawbbit-browser-game/ Browser-game JavaScript SDK source and integration guide
 quickstart/        Provider-neutral VM deployment guides
 docs/              OSS documentation
 ```
@@ -198,6 +202,9 @@ Current maturity:
 - Metabase can be deployed separately or together with the Rawbbit MCP server package
 - BigQuery external-table querying is supported as an optional path
 - [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) is included as an optional starter layer for the BigQuery path
+- The copy-in Unity SDK is a source implementation; Unity Editor compilation, PlayMode tests, and Android/iOS player/device validation are not yet complete, so production compatibility is not established
+- The browser-game SDK source is included and builds independently of other SDK folders; the separate npm package remains private and unpublished
+- The browser-game SDK feature-checks secure top-level capabilities and has a passing Playwright run for Chromium, Firefox, and WebKit; no exact browser/version support matrix or real Safari/mobile-device validation is established.
 
 The current release is intentionally narrow: it focuses on reliable player-event ingestion, durable raw storage, ClickHouse-backed analytics, and agent/BI access on top of that serving layer.
 
@@ -215,6 +222,11 @@ The included [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) model is inten
 - [`dbt_project/README.md`](dbt_project/README.md)
 - [`mcp-server/README.md`](mcp-server/README.md) — includes Codex, OpenCode, and OpenClaw MCP client examples
 - [`metabase/README.md`](metabase/README.md)
+- [`sdk/rawbbit-unity/README.md`](sdk/rawbbit-unity/README.md) — Unity SDK installation, behavior, and validation status
+- [`sdk/rawbbit-unity/INTEGRATION.md`](sdk/rawbbit-unity/INTEGRATION.md) — game-adapter and consent integration
+- [`sdk/rawbbit-browser-game/README.md`](sdk/rawbbit-browser-game/README.md) — browser-game SDK installation and API overview
+- [`sdk/rawbbit-browser-game/INTEGRATION.md`](sdk/rawbbit-browser-game/INTEGRATION.md) — host consent, storage, delivery, and recovery integration
+- [`docs/browser-game-sdk.md`](docs/browser-game-sdk.md) — browser-game SDK local installation, integration, privacy, limits, and validation status
 
 ## License
 

@@ -1,0 +1,176 @@
+// Copy this file into the consuming game's own Analytics folder, rename it to
+// GameAnalyticsAdapter.cs, then replace the marked configuration and event
+// contract choices. It is deliberately not compiled as part of Rawbbit.Unity.
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Rawbbit.Unity;
+
+namespace YourGame.Analytics
+{
+    public sealed class GameAnalyticsAdapter
+    {
+        private readonly RawbbitUnityHost _host;
+
+        private GameAnalyticsAdapter(RawbbitUnityHost host)
+        {
+            _host = host;
+        }
+
+        public bool IsReady { get { return _host.IsReady; } }
+        public bool InitializationFailed { get { return _host.InitializationFailed; } }
+
+        // Call once from the game's bootstrap after its consent policy and
+        // runtime configuration source are available. Do not place a real key
+        // in source control or scattered gameplay call sites.
+        public static GameAnalyticsAdapter Initialize(
+            string collectorUrl,
+            string appScopedApiKey,
+            string gameAppId,
+            string environment,
+            string productName,
+            bool hasSessionStartedEvent,
+            bool includeSessionSequenceInEventParams = false,
+            string previousCollectorUrl = null,
+            bool allowFreshStoreWithUnresolvedLegacyStores = false)
+        {
+            var configuration = new RawbbitConfiguration
+            {
+                CollectorUrl = collectorUrl,
+                // Set only for an approved endpoint move; identifies the old
+                // store/binding and authorizes replay to the new destination.
+                PreviousCollectorUrl = previousCollectorUrl,
+                // Assert this app/environment is new, not an endpoint move.
+                AllowFreshStoreWithUnresolvedLegacyStores = allowFreshStoreWithUnresolvedLegacyStores,
+                ApiKey = appScopedApiKey,
+                AppId = gameAppId,       // same ID on Android/iOS; SDK fills device.platform
+                Environment = environment,
+                Product = productName,
+                Surface = "unity_game",
+                SourceType = "game_client",
+                SchemaVersion = "1"
+            };
+
+            RawbbitSessionStartFactory sessionFactory = hasSessionStartedEvent
+                ? BuildSessionStartedEvent
+                : null;
+            RawbbitEventContextMapper eventContextMapper = includeSessionSequenceInEventParams
+                ? new RawbbitEventContextMapper(MapSessionSequence)
+                : null;
+            RawbbitUnityHost host = RawbbitUnityHost.Create(configuration, null, sessionFactory, null,
+                eventContextMapper);
+            return new GameAnalyticsAdapter(host);
+        }
+
+        // Re-check the game's saved/current consent policy at every app start.
+        // Call only when the host has established that analytics is permitted.
+        public Task<RawbbitRecoveryResult> ConfirmCurrentConsentAsync()
+        {
+            return _host.ConfirmConsentAsync();
+        }
+
+        // Call when permission is explicitly withdrawn. This prevents future
+        // sends, purges the remaining local queue and resets session state while
+        // retaining the installation identity. An already-started HTTP request
+        // is best-effort cancelled and cannot be recalled from the Collector.
+        public Task<RawbbitRecoveryResult> WithdrawConsentAsync()
+        {
+            return _host.WithdrawConsentAsync();
+        }
+
+        // Invoke after a successful, committed game-state transition. Construct
+        // parameters and user_properties from immutable state captured now.
+        // Do not call from a tap/animation callback before the action succeeds.
+        public Task<RawbbitTrackResult> TrackCommittedEventAsync(RawbbitEventInput gameOwnedEvent)
+        {
+            return _host.TrackAsync(gameOwnedEvent);
+        }
+
+        private static void MapSessionSequence(RawbbitSessionContext context, RawbbitEventInput triggeringEvent)
+        {
+            // GAME CONTRACT PLACEHOLDER: remove this mapper if the game does not
+            // define a sequence field, or rename the property to match its schema.
+            IDictionary<string, object> parameters = triggeringEvent.EventParams;
+            if (parameters == null)
+            {
+                parameters = new Dictionary<string, object>();
+                triggeringEvent.EventParams = parameters;
+            }
+            parameters["session_event_sequence"] = context.TriggeringEventSequence;
+        }
+
+        // Recovery is explicit and host-authorized. Do not call these methods
+        // automatically from startup, request failure, or an SDK upgrade. Read
+        // safe metadata, review exact handles, and retain fresh revision tokens.
+        public RawbbitQueueDiagnostics GetQueueDiagnostics()
+        {
+            return IsReady ? _host.Client.GetDiagnostics() : null;
+        }
+
+        public IList<RawbbitQuarantinedRecordInfo> ListQuarantinedRecords()
+        {
+            return IsReady ? _host.Client.ListQuarantinedRecords() : new List<RawbbitQuarantinedRecordInfo>();
+        }
+
+        // Call only with fresh consent and only after confirming the original
+        // frozen records are still valid. This does not rewrite their bytes.
+        public Task<RawbbitRecoveryResult> RetrySelectedRecordsAsync(
+            IList<string> reviewedOpaqueHandles,
+            long faultRevision,
+            long queueGeneration,
+            string allowedReasonCode,
+            string reviewedPolicyVersion)
+        {
+            return _host.RetryQuarantinedAsync(
+                reviewedOpaqueHandles, faultRevision, queueGeneration, allowedReasonCode, reviewedPolicyVersion);
+        }
+
+        // Data loss requires separate explicit authorization. Supply only the
+        // exact reviewed quarantined handles, not every record in the queue.
+        public Task<RawbbitRecoveryResult> DisposeSelectedRecordsAsync(
+            IList<string> reviewedOpaqueHandles,
+            long faultRevision,
+            long queueGeneration,
+            string allowedReasonCode,
+            string reviewedPolicyVersion)
+        {
+            return _host.DiscardQuarantinedAsync(
+                reviewedOpaqueHandles, faultRevision, queueGeneration, allowedReasonCode, reviewedPolicyVersion);
+        }
+
+        // Re-read diagnostics after retry/disposal, verify the cause is fixed,
+        // then explicitly validate all remaining frozen envelopes before
+        // clearing the persistent delivery-fault latch.
+        public Task<RawbbitRecoveryResult> ValidateAndResumeAsync(
+            long faultRevision,
+            long queueGeneration,
+            string allowedReasonCode,
+            string reviewedPolicyVersion)
+        {
+            return _host.ValidateAndResumeAsync(
+                faultRevision, queueGeneration, allowedReasonCode, reviewedPolicyVersion);
+        }
+
+        private static RawbbitEventInput BuildSessionStartedEvent(
+            RawbbitSessionContext context,
+            RawbbitEventInput triggeringEvent)
+        {
+            // GAME CONTRACT PLACEHOLDER: replace the event name and parameter
+            // mapping only if this game defines a session-start event. The SDK
+            // invokes this with frozen trigger-time input and queues this event
+            // before the triggering event, both with context.SessionId.
+            return new RawbbitEventInput
+            {
+                EventName = "session_started",
+                EventParams = new Dictionary<string, object>
+                {
+                    // Map to the game's schema if it uses an event sequence.
+                    ["session_event_sequence"] = context.SessionStartedEventSequence
+                },
+                UserProperties = triggeringEvent.UserProperties,
+                Device = triggeringEvent.Device,
+                TrafficSource = triggeringEvent.TrafficSource,
+                Geo = triggeringEvent.Geo
+            };
+        }
+    }
+}

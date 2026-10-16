@@ -1,0 +1,17 @@
+{
+  "name": "Rawbbit.Unity.Tests.Runtime",
+  "rootNamespace": "Rawbbit.Unity.Tests",
+  "references": [
+    "Rawbbit.Unity"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"],
+  "versionDefines": [],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "noEngineReferences": false
+}

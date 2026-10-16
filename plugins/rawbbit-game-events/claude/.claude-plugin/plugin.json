@@ -2,7 +2,7 @@
   "name": "rawbbit-game-events",
   "displayName": "Rawbbit Game Event Tracking",
   "description": "Design, integrate, migrate, and maintain Rawbbit in-game event tracking with bundled Unity and browser-game SDK references.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "author": {
     "name": "Rawbbit",
     "url": "https://rawbbit.one/"

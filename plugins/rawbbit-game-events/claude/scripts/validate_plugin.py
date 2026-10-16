@@ -33,17 +33,21 @@ REQUIRED = (
 def validate() -> None:
     manifest = json.loads((PLUGIN / ".claude-plugin/plugin.json").read_text())
     required = {"name", "description", "version", "author", "license"}
-    listing = {"displayName", "homepage", "repository", "keywords"}
+    links = ("homepage", "repository", "privacyPolicyUrl", "supportUrl")
+    listing = {"displayName", "keywords", *links}
     if not required <= set(manifest) <= required | listing:
         raise ValueError("Unexpected Claude manifest fields")
-    for key in ("displayName", "homepage", "repository"):
+    for key in ("displayName", *links):
         if key in manifest and not (isinstance(manifest[key], str) and manifest[key].strip()):
             raise ValueError(f"Invalid Claude manifest field: {key}")
-    for key in ("homepage", "repository"):
+    for key in links:
         if key in manifest:
             url = urlsplit(manifest[key])
-            if url.scheme != "https" or not url.netloc:
-                raise ValueError(f"Claude manifest {key} must be an https URL")
+            web = url.scheme == "https" and url.netloc
+            email = key == "supportUrl" and url.scheme == "mailto" and "@" in url.path
+            if not (web or email):
+                raise ValueError(f"Claude manifest {key} must be an https URL"
+                                 + (" or mailto address" if key == "supportUrl" else ""))
     keywords = manifest.get("keywords", [])
     if not isinstance(keywords, list) or not all(isinstance(item, str) and item.strip() for item in keywords):
         raise ValueError("Invalid Claude manifest keywords")

@@ -25,6 +25,13 @@ In Claude Code or Cowork, the skill works on a local game checkout. In Claude ch
 - **The integrated SDK** sends gameplay events only to the Rawbbit Collector URL that you configure in your game, and only after the game's consent gate allows it. The skill tests against a mocked Collector and does not send live traffic unless you explicitly authorize it.
 - **Credentials:** the skill asks where your game stores its app-scoped ingest key, never for the key value, and commits only placeholders.
 
+## Privacy
+
+- **No data collection.** The plugin collects, stores, and transmits no personal or usage data. Rawbbit, the publisher, receives nothing from installing or using it.
+- **Local project only.** The skill reads and edits files only in the game checkout you open. Event maps, code changes, and test output stay in that project.
+- **Credentials.** The skill never asks for, stores, or commits an ingest key's value; it asks only where your game's configuration keeps it.
+- **Your game's telemetry.** If you integrate the bundled SDK, your game sends gameplay events to the Rawbbit Collector that you configure and operate, only after your game's consent gate allows it. Rawbbit does not host or receive that data. Your own privacy policy and player-consent flow govern it.
+
 ## Contents
 
 - [Skill workflow](skills/rawbbit-game-events/SKILL.md)

@@ -32,6 +32,10 @@ In Claude Code or Cowork, the skill works on a local game checkout. In Claude ch
 - **Credentials.** The skill never asks for, stores, or commits an ingest key's value; it asks only where your game's configuration keeps it.
 - **Your game's telemetry.** If you integrate the bundled SDK, your game sends gameplay events to the Rawbbit Collector that you configure and operate, only after your game's consent gate allows it. Rawbbit does not host or receive that data. Your own privacy policy and player-consent flow govern it.
 
+## Support
+
+Report bugs and request features in the Rawbbit repository's GitHub Issues, or email team@rawbbit.one.
+
 ## Contents
 
 - [Skill workflow](skills/rawbbit-game-events/SKILL.md)

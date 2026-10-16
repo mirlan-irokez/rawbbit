@@ -2,7 +2,7 @@
   "name": "rawbbit-game-events",
   "displayName": "Rawbbit Game Event Tracking",
   "description": "Design, integrate, migrate, and maintain Rawbbit in-game event tracking with bundled Unity and browser-game SDK references.",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "author": {
     "name": "Rawbbit",
     "url": "https://rawbbit.one/"
@@ -10,7 +10,7 @@
   "homepage": "https://rawbbit.one/",
   "repository": "https://github.com/mirlan-irokez/rawbbit",
   "privacyPolicyUrl": "https://github.com/mirlan-irokez/rawbbit/tree/main/plugins/rawbbit-game-events/claude#privacy",
-  "supportUrl": "mailto:team@rawbbit.one",
+  "supportUrl": "https://github.com/mirlan-irokez/rawbbit/issues",
   "license": "Apache-2.0",
   "keywords": [
     "game-analytics",

@@ -43,11 +43,8 @@ def validate() -> None:
     for key in links:
         if key in manifest:
             url = urlsplit(manifest[key])
-            web = url.scheme == "https" and url.netloc
-            email = key == "supportUrl" and url.scheme == "mailto" and "@" in url.path
-            if not (web or email):
-                raise ValueError(f"Claude manifest {key} must be an https URL"
-                                 + (" or mailto address" if key == "supportUrl" else ""))
+            if url.scheme != "https" or not url.netloc:
+                raise ValueError(f"Claude manifest {key} must be an https URL")
     keywords = manifest.get("keywords", [])
     if not isinstance(keywords, list) or not all(isinstance(item, str) and item.strip() for item in keywords):
         raise ValueError("Invalid Claude manifest keywords")

@@ -13,9 +13,7 @@ from urllib.parse import unquote, urlsplit
 PLUGIN = Path(__file__).resolve().parents[1]
 SKILL_ROOT = PLUGIN / "skills/rawbbit-game-events"
 LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
-ICON = ".claude-plugin/icon.png"
 REQUIRED = (
-    ICON,
     "LICENSE",
     "rawbbit-icon.svg",
     "scripts/verify_bundle.py",
@@ -46,12 +44,6 @@ def validate() -> None:
             url = urlsplit(manifest[key])
             if url.scheme != "https" or not url.netloc:
                 raise ValueError(f"Claude manifest {key} must be an https URL")
-    icon = (PLUGIN / ICON).read_bytes()
-    if icon[:8] != b"\x89PNG\r\n\x1a\n" or icon[12:16] != b"IHDR":
-        raise ValueError("Listing icon must be a PNG")
-    width, height = int.from_bytes(icon[16:20], "big"), int.from_bytes(icon[20:24], "big")
-    if width != height or not 512 <= width <= 2048 or len(icon) >= 2 * 1024 * 1024:
-        raise ValueError("Listing icon must be a square 512-2048 px PNG under 2 MB")
     keywords = manifest.get("keywords", [])
     if not isinstance(keywords, list) or not all(isinstance(item, str) and item.strip() for item in keywords):
         raise ValueError("Invalid Claude manifest keywords")

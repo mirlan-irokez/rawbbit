@@ -1,0 +1,17 @@
+{
+  "name": "rawbbit",
+  "plugins": [
+    {
+      "name": "rawbbit-game-events",
+      "source": {
+        "source": "local",
+        "path": "./plugins/rawbbit-game-events/codex"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

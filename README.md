@@ -74,6 +74,7 @@ This repository contains the public game-telemetry ingestion-to-analytics path:
 - `sdk/rawbbit-unity/` — copy-in Unity C# SDK source, generic game-adapter template, and Editor/PlayMode test sources; Unity compilation and Android/iOS player/device validation are pending
 - `sdk/rawbbit-browser-game/` — self-contained browser-game JavaScript SDK source with a durable queue, consent integration guide, tests, and a copy-in game-adapter template. The source builds without another SDK folder; the separate `@rawbbit/browser-game` npm package remains private and unpublished.
 - `sqlmesh_project/` — optional [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) project for the BigQuery external-table path
+- `plugins/rawbbit-game-events/` — coding-agent plugins for Claude and Codex that inspect a Unity or browser-JavaScript game, propose a reviewable event map, and integrate approved events with the bundled SDKs. See [`docs/agent-plugins.md`](docs/agent-plugins.md) for downloads and install steps.
 
 ## Architecture
 
@@ -172,6 +173,11 @@ mcp-server/        Rawbbit MCP server and optional Metabase deploy path
 metabase/          Metabase OSS ver. deploy instructions
 sdk/rawbbit-unity/ Copy-in Unity SDK source, integration guide, and tests
 sdk/rawbbit-browser-game/ Browser-game JavaScript SDK source and integration guide
+plugins/rawbbit-game-events/
+  claude/          Claude plugin (skills only) with bundled SDKs
+  codex/           Codex plugin with bundled SDKs and optional SDK catalog
+.claude-plugin/    Claude Code plugin marketplace for this repository
+.agents/plugins/   Codex plugin marketplace for this repository
 quickstart/        Provider-neutral VM deployment guides
 docs/              OSS documentation
 ```
@@ -205,6 +211,7 @@ Current maturity:
 - The copy-in Unity SDK is a source implementation; Unity Editor compilation, PlayMode tests, and Android/iOS player/device validation are not yet complete, so production compatibility is not established
 - The browser-game SDK source is included and builds independently of other SDK folders; the separate npm package remains private and unpublished
 - The browser-game SDK feature-checks secure top-level capabilities and has a passing Playwright run for Chromium, Firefox, and WebKit; no exact browser/version support matrix or real Safari/mobile-device validation is established.
+- The Rawbbit Game Event Tracking plugins are downloadable from GitHub releases. The Claude plugin is submitted to Anthropic's plugin directory and the Codex plugin is not yet listed in OpenAI's directory; until then, install them from the release ZIPs as described in [`docs/agent-plugins.md`](docs/agent-plugins.md).
 
 The current release is intentionally narrow: it focuses on reliable player-event ingestion, durable raw storage, ClickHouse-backed analytics, and agent/BI access on top of that serving layer.
 
@@ -227,6 +234,9 @@ The included [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) model is inten
 - [`sdk/rawbbit-browser-game/README.md`](sdk/rawbbit-browser-game/README.md) — browser-game SDK installation and API overview
 - [`sdk/rawbbit-browser-game/INTEGRATION.md`](sdk/rawbbit-browser-game/INTEGRATION.md) — host consent, storage, delivery, and recovery integration
 - [`docs/browser-game-sdk.md`](docs/browser-game-sdk.md) — browser-game SDK local installation, integration, privacy, limits, and validation status
+- [`docs/agent-plugins.md`](docs/agent-plugins.md) — download and install the Claude and Codex game-events plugins
+- [`plugins/rawbbit-game-events/claude/README.md`](plugins/rawbbit-game-events/claude/README.md) — Claude plugin: what it runs and sends, privacy, and support
+- [`plugins/rawbbit-game-events/codex/README.md`](plugins/rawbbit-game-events/codex/README.md) — Codex plugin: what it runs and sends to the SDK catalog, privacy, and support
 
 ## License
 

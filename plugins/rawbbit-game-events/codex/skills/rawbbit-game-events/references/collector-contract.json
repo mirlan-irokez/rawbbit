@@ -1,0 +1,189 @@
+{
+  "auth_header": "X-API-Key",
+  "defaults": {
+    "max_events_per_request": 500,
+    "max_request_bytes": 1048576
+  },
+  "format_version": 1,
+  "method": "POST",
+  "models": {
+    "ConsentContext": {
+      "ads_storage": {
+        "required": false,
+        "type": "bool | None"
+      },
+      "analytics_storage": {
+        "required": false,
+        "type": "bool | None"
+      },
+      "personalization": {
+        "required": false,
+        "type": "bool | None"
+      }
+    },
+    "DeviceContext": {
+      "app_version": {
+        "required": false,
+        "type": "str | None"
+      },
+      "device_model": {
+        "required": false,
+        "type": "str | None"
+      },
+      "locale": {
+        "required": false,
+        "type": "str | None"
+      },
+      "os_version": {
+        "required": false,
+        "type": "str | None"
+      },
+      "platform": {
+        "required": false,
+        "type": "str | None"
+      },
+      "timezone": {
+        "required": false,
+        "type": "str | None"
+      }
+    },
+    "EventBatchRequest": {
+      "events": {
+        "required": false,
+        "type": "list[EventEnvelope]"
+      }
+    },
+    "EventEnvelope": {
+      "app_id": {
+        "required": true,
+        "type": "str"
+      },
+      "consent": {
+        "required": false,
+        "type": "ConsentContext | None"
+      },
+      "device": {
+        "required": false,
+        "type": "DeviceContext | None"
+      },
+      "environment": {
+        "required": false,
+        "type": "str | None"
+      },
+      "event_id": {
+        "required": true,
+        "type": "str"
+      },
+      "event_name": {
+        "required": true,
+        "type": "str"
+      },
+      "event_params": {
+        "required": false,
+        "type": "dict[str, Any]"
+      },
+      "event_timestamp": {
+        "required": true,
+        "type": "datetime"
+      },
+      "geo": {
+        "required": false,
+        "type": "GeoContext | None"
+      },
+      "ingest": {
+        "required": false,
+        "type": "IngestContext | None"
+      },
+      "received_at": {
+        "required": false,
+        "type": "datetime | None"
+      },
+      "traffic_source": {
+        "required": false,
+        "type": "TrafficSource | None"
+      },
+      "user": {
+        "required": false,
+        "type": "UserContext | None"
+      },
+      "user_properties": {
+        "required": false,
+        "type": "dict[str, Any]"
+      }
+    },
+    "GeoContext": {
+      "city": {
+        "required": false,
+        "type": "str | None"
+      },
+      "country": {
+        "required": false,
+        "type": "str | None"
+      },
+      "country_code": {
+        "required": false,
+        "type": "str | None"
+      },
+      "region": {
+        "required": false,
+        "type": "str | None"
+      },
+      "timezone": {
+        "required": false,
+        "type": "str | None"
+      }
+    },
+    "IngestContext": {
+      "ip": {
+        "required": false,
+        "type": "str | None"
+      },
+      "ip_hash": {
+        "required": false,
+        "type": "str | None"
+      },
+      "received_at": {
+        "required": false,
+        "type": "datetime | None"
+      },
+      "request_id": {
+        "required": false,
+        "type": "str | None"
+      },
+      "user_agent": {
+        "required": false,
+        "type": "str | None"
+      }
+    },
+    "TrafficSource": {
+      "campaign": {
+        "required": false,
+        "type": "str | None"
+      },
+      "medium": {
+        "required": false,
+        "type": "str | None"
+      },
+      "source": {
+        "required": false,
+        "type": "str | None"
+      }
+    },
+    "UserContext": {
+      "session_id": {
+        "required": false,
+        "type": "str | None"
+      },
+      "user_id": {
+        "required": false,
+        "type": "str | None"
+      },
+      "user_pseudo_id": {
+        "required": false,
+        "type": "str | None"
+      }
+    }
+  },
+  "path": "/v1/events:batch",
+  "pydantic_version": "2.12.5"
+}

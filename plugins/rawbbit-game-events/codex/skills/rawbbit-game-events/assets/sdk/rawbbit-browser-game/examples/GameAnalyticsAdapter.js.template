@@ -1,0 +1,521 @@
+// Consumer-owned example adapter. It contains no game framework or event
+// catalogue; call it with captured values after the game's own transition
+// has committed.
+import {
+  createBrowserGameClient,
+  createLocalStorageRevocationStore,
+} from "@rawbbit/browser-game"
+
+export function createSessionStartEvent(context) {
+  return {
+    eventName: "session_started",
+    eventParams: { session_started_sequence: context.eventSequence },
+  }
+}
+
+export function mapSessionSequence(context, eventSnapshot) {
+  return {
+    eventParams: {
+      ...(eventSnapshot.eventParams ?? eventSnapshot.event_params ?? {}),
+      sdk_session_event_sequence: context.eventSequence,
+    },
+  }
+}
+
+export async function createGameAnalyticsAdapter({
+  config,
+  readCurrentAnalyticsPermission,
+  readAnalyticsPermissionGeneration,
+  isAnalyticsPermissionAllowed,
+  persistAnalyticsPermissionDenied,
+  sessionStartFactory = createSessionStartEvent,
+  eventContextMapper = mapSessionSequence,
+}) {
+  if (typeof readCurrentAnalyticsPermission !== "function") {
+    throw new TypeError("readCurrentAnalyticsPermission must be a function")
+  }
+  if (typeof readAnalyticsPermissionGeneration !== "function") {
+    throw new TypeError("readAnalyticsPermissionGeneration must be a synchronous function")
+  }
+  if (typeof isAnalyticsPermissionAllowed !== "function") {
+    throw new TypeError("isAnalyticsPermissionAllowed must be a synchronous function")
+  }
+  if (typeof persistAnalyticsPermissionDenied !== "function") {
+    throw new TypeError("persistAnalyticsPermissionDenied must be a function")
+  }
+
+  const runtime = config.runtime ?? {}
+  const lockManager = config.locks !== undefined
+    ? config.locks
+    : runtime.locks === undefined ? globalThis.navigator?.locks : runtime.locks
+  if (typeof lockManager?.request !== "function") {
+    throw new TypeError("The host adapter requires the SDK Web Locks manager")
+  }
+  const lockTimeoutMs = config.lockTimeoutMs ?? 3000
+  const scope = `rawbbit-browser-game:${encodeURIComponent(config.appId)}:${encodeURIComponent(config.environment)}`
+  const hostConsentLock = `${scope}:host-consent`
+  const abortedError = signal => signal?.reason ?? new DOMException("The operation was aborted", "AbortError")
+  const withHostConsentLock = (callback, externalSignal) => {
+    if (externalSignal?.aborted) return Promise.reject(abortedError(externalSignal))
+    const controller = new AbortController()
+    let acquired = false
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, lockTimeoutMs)
+    const cancelQueuedRequest = () => {
+      if (!acquired) controller.abort(abortedError(externalSignal))
+    }
+    externalSignal?.addEventListener("abort", cancelQueuedRequest, { once: true })
+    let request
+    try {
+      request = lockManager.request(hostConsentLock, {
+        mode: "exclusive",
+        signal: controller.signal,
+      }, lock => {
+        acquired = true
+        clearTimeout(timer)
+        return callback(lock)
+      })
+    } catch (error) {
+      clearTimeout(timer)
+      externalSignal?.removeEventListener("abort", cancelQueuedRequest)
+      return Promise.reject(error)
+    }
+    return Promise.resolve(request).catch(error => {
+      if (timedOut && !acquired) {
+        throw new Error("Timed out waiting for the host analytics permission lock", { cause: error })
+      }
+      throw error
+    }).finally(() => {
+      clearTimeout(timer)
+      externalSignal?.removeEventListener("abort", cancelQueuedRequest)
+    })
+  }
+  const hostAllows = () => {
+    try { return isAnalyticsPermissionAllowed() === true }
+    catch { return false }
+  }
+  const hostPermissionGeneration = () => {
+    try {
+      const generation = readAnalyticsPermissionGeneration()
+      return Number.isSafeInteger(generation) && generation >= 0 ? generation : null
+    } catch { return null }
+  }
+  const readAllowedPermission = async () => {
+    if (!hostAllows()) return false
+    const allowed = await readCurrentAnalyticsPermission()
+    return allowed === true && hostAllows()
+  }
+  const baseFetch = config.fetchImpl ?? runtime.fetch ?? globalThis.fetch?.bind(globalThis)
+  if (typeof baseFetch !== "function") throw new TypeError("A Collector Fetch implementation is required")
+  const hostGatedFetch = (...args) => {
+    // Serialize the actual Fetch invocation with host denial. The Web Lock is
+    // released immediately after Fetch starts, not after its response settles.
+    const signal = args[1]?.signal
+    if (signal?.aborted) return Promise.reject(abortedError(signal))
+    // Reject before queueing if denial has already begun. Otherwise a queued
+    // old batch might run only after withdrawal and immediate re-consent.
+    const generation = hostPermissionGeneration()
+    if (generation === null || !hostAllows()) return Promise.reject(new Error("Host analytics permission is denied"))
+    let request
+    return withHostConsentLock(() => {
+      if (signal?.aborted) throw abortedError(signal)
+      if (!hostAllows() || hostPermissionGeneration() !== generation) {
+        throw new Error("Host analytics permission changed before Fetch start")
+      }
+      request = baseFetch(...args)
+    }, signal).then(() => request)
+  }
+
+  const configuredClock = () => config.clock == null ? Date.now() : config.clock()
+  let activeTrackClock = null
+  let adapterHookDepth = 0
+  const guardAdapterHook = callback => {
+    if (typeof callback !== "function") return callback
+    return (...args) => {
+      adapterHookDepth += 1
+      try { return callback(...args) }
+      finally { adapterHookDepth -= 1 }
+    }
+  }
+  // Preserve callbacks supplied through config when the explicit adapter
+  // option is null, while ensuring every hook enters the adapter reentrancy
+  // latch before SDK code invokes it.
+  const guardedSessionStartFactory = guardAdapterHook(sessionStartFactory || config.sessionStartFactory)
+  const guardedEventContextMapper = guardAdapterHook(eventContextMapper || config.eventContextMapper)
+  const sdkClock = () => activeTrackClock === null ? configuredClock() : activeTrackClock
+  const client = await createBrowserGameClient({
+    ...config,
+    fetchImpl: hostGatedFetch,
+    clock: sdkClock,
+    revocationStore: config.revocationStore ?? createLocalStorageRevocationStore({
+      appId: config.appId,
+      environment: config.environment,
+    }),
+    sessionStartFactory: guardedSessionStartFactory,
+    eventContextMapper: guardedEventContextMapper,
+  })
+  let withdrawalNeedsRepair = false
+  let withdrawalPromise = null
+  let pendingTrackOperations = 0
+  let pendingTrackBytes = 0
+  const permissionBlocked = () => ({ status: "consentWithdrawn", safeDiagnosticCode: "consentWithdrawn" })
+  const callbackReentrancy = () => ({ status: "invalidEvent", safeDiagnosticCode: "callbackReentrancy" })
+  const recoveryBlocked = () => ({ status: "recoveryPending", safeDiagnosticCode: "consentWithdrawn" })
+  const invalidEvent = () => ({ status: "invalidEvent", safeDiagnosticCode: "invalidEvent" })
+  const busyResult = () => ({ status: "busy", safeDiagnosticCode: "busy" })
+  const maxPendingTrackOperations = config.maxPendingTrackOperations ?? 64
+
+  // Adapter methods acquire the host lock asynchronously, so detach inputs
+  // synchronously at call time. Mirror the SDK's bounded plain-JSON snapshot
+  // rules closely enough that queued calls cannot observe later caller edits.
+  const maxSnapshotDepth = config.maxSnapshotDepth ?? 32
+  const maxPendingTrackBytes = config.maxPendingTrackBytes ?? 2097152
+  const maxTrackBatchEvents = config.maxTrackBatchEvents ?? 500
+  const captureTrackClock = () => {
+    const now = configuredClock()
+    if (!Number.isFinite(now) || now < 0) throw new RangeError("Track clock is invalid")
+    return { now, eventTimestamp: new Date(now).toISOString() }
+  }
+  const snapshotJson = (value, maxDepth = maxSnapshotDepth) => {
+    const ancestors = new Set()
+    let nodes = 0
+    let characters = 0
+    const charge = amount => {
+      characters += amount
+      if (characters > maxPendingTrackBytes) throw new RangeError("Event snapshot is too large")
+    }
+    const visit = (current, depth) => {
+      if (++nodes > 100000 || depth > maxDepth) throw new RangeError("Event snapshot is too complex")
+      if (typeof current === "string") { charge(current.length + 2); return current }
+      if (current === null || typeof current === "boolean") { charge(4); return current }
+      if (typeof current === "number" && Number.isFinite(current)) { charge(String(current).length); return current }
+      if (typeof current !== "object") throw new TypeError("Event values must be JSON-compatible")
+
+      const array = Array.isArray(current)
+      if (array ? Object.getPrototypeOf(current) !== Array.prototype :
+        ![Object.prototype, null].includes(Object.getPrototypeOf(current))) {
+        throw new TypeError("Event values must be plain JSON objects and arrays")
+      }
+      if (ancestors.has(current)) throw new TypeError("Event values must not contain cycles")
+      ancestors.add(current)
+      charge(2)
+      const keys = Reflect.ownKeys(current)
+      if (keys.length > 100001 || (array && current.length > 100000)) throw new RangeError("Event snapshot is too complex")
+      const descriptors = Object.getOwnPropertyDescriptors(current)
+      for (const key of keys) {
+        const descriptor = descriptors[key]
+        if (typeof key !== "string" || descriptor.get || descriptor.set ||
+            (!descriptor.enumerable && !(array && key === "length"))) {
+          throw new TypeError("Event values cannot contain symbols, accessors or hidden properties")
+        }
+      }
+
+      const copy = array ? [] : {}
+      if (array) {
+        if (keys.length !== current.length + 1) throw new TypeError("Event arrays must be dense")
+        for (let index = 0; index < current.length; index += 1) {
+          if (!Object.hasOwn(descriptors, String(index))) throw new TypeError("Event arrays must be dense")
+          copy.push(visit(descriptors[index].value, depth + 1))
+        }
+      } else {
+        for (const key of keys) {
+          charge(key.length + 4)
+          Object.defineProperty(copy, key, {
+            value: visit(descriptors[key].value, depth + 1),
+            enumerable: true,
+            writable: true,
+            configurable: true,
+          })
+        }
+      }
+      ancestors.delete(current)
+      return copy
+    }
+    const copy = visit(value, 0)
+    if (new TextEncoder().encode(JSON.stringify(copy)).byteLength > maxPendingTrackBytes) {
+      throw new RangeError("Event snapshot is too large")
+    }
+    return copy
+  }
+
+  const withdrawConsent = () => {
+    if (withdrawalPromise) return withdrawalPromise
+    withdrawalNeedsRepair = true
+    let resolveOperation, rejectOperation
+    const trackedOperation = new Promise((resolve, reject) => {
+      resolveOperation = resolve
+      rejectOperation = reject
+    })
+    // Install the latch before invoking host code so a synchronous callback
+    // cannot recursively start a second withdrawal.
+    withdrawalPromise = trackedOperation
+
+    // The callback's synchronous prefix must immediately close the shared host
+    // gate. Do this before waiting for the lock so old adapters block new
+    // admissions and Fetch calls even if lock acquisition later fails. An
+    // already-started admission is drained before SDK withdrawal is attempted.
+    let hostWrite
+    try { hostWrite = Promise.resolve(persistAnalyticsPermissionDenied()) }
+    catch (error) { hostWrite = Promise.reject(error) }
+    const hostOutcome = hostWrite.then(async () => {
+      // This immediate check verifies wiring only. It cannot prove durability
+      // across restart; the host callbacks must share a durable authority.
+      if (await readCurrentAnalyticsPermission() !== false || hostAllows()) {
+        throw new Error("Host analytics permission did not persist as denied")
+      }
+      return { ok: true }
+    }, error => ({ ok: false, error })).then(
+      value => value,
+      error => ({ ok: false, error }),
+    )
+
+    const operation = withHostConsentLock(async () => {
+      // Drain earlier adapter admissions before SDK purge. The shared host gate
+      // is already closed, so new operations wait and then fail their check.
+      let sdkResult
+      let sdkError
+      try { sdkResult = await client.withdrawConsent() }
+      catch (error) { sdkResult = null; sdkError = error }
+      const hostResult = await hostOutcome
+      if (!hostResult.ok) {
+        const error = new Error(
+          "Could not persist and verify host analytics denial; keep consent denied and do not re-grant.",
+          { cause: hostResult.error },
+        )
+        if (sdkResult) error.withdrawalResult = sdkResult
+        throw error
+      }
+      if (sdkError) throw sdkError
+      if (sdkResult?.globalWithdrawalCommitted === true && sdkResult?.revocationCleared === true) {
+        withdrawalNeedsRepair = false
+      }
+      return sdkResult
+    })
+    operation.then(value => {
+      // Clear the latch before resolving so explicit re-consent immediately
+      // after `await withdrawConsent()` does not observe a settled old promise.
+      if (withdrawalPromise === trackedOperation) withdrawalPromise = null
+      resolveOperation(value)
+    }, error => {
+      if (withdrawalPromise === trackedOperation) withdrawalPromise = null
+      rejectOperation(error)
+    })
+    return trackedOperation
+  }
+
+  const trackWithPermission = (prepare, track) => (...args) => {
+    // SDK hook callbacks run inside an SDK-owned admission. Do not let a
+    // reentrant adapter call queue behind its own host lock and run afterward.
+    if (adapterHookDepth > 0) return Promise.resolve(callbackReentrancy())
+    // A call made while denial is active must not wait in the lock queue and
+    // become a new admission after a later opt-in.
+    const generation = hostPermissionGeneration()
+    if (generation === null || withdrawalNeedsRepair || !hostAllows()) return Promise.resolve(permissionBlocked())
+    if (pendingTrackOperations >= maxPendingTrackOperations) return Promise.resolve(busyResult())
+    // Reserve an operation slot before snapshotting, since proxies can execute
+    // user code in reflection traps. Reentrant calls are therefore bounded too.
+    pendingTrackOperations += 1
+    let prepared
+    try { prepared = prepare(...args) }
+    catch {
+      pendingTrackOperations -= 1
+      return Promise.resolve(invalidEvent())
+    }
+    const { snapshot, now } = prepared
+    let snapshotBytes
+    try { snapshotBytes = new TextEncoder().encode(JSON.stringify(snapshot)).byteLength }
+    catch {
+      pendingTrackOperations -= 1
+      return Promise.resolve(invalidEvent())
+    }
+    if (snapshotBytes > maxPendingTrackBytes - pendingTrackBytes) {
+      pendingTrackOperations -= 1
+      return Promise.resolve(busyResult())
+    }
+    pendingTrackBytes += snapshotBytes
+    return withHostConsentLock(() => {
+      if (withdrawalNeedsRepair || !hostAllows() || hostPermissionGeneration() !== generation) {
+        return permissionBlocked()
+      }
+      activeTrackClock = now
+      try { return track(snapshot) }
+      finally { activeTrackClock = null }
+    }).catch(() => busyResult()).finally(() => {
+      pendingTrackOperations -= 1
+      pendingTrackBytes -= snapshotBytes
+    })
+  }
+
+  return {
+    // Call once after initialization and again when the host re-evaluates
+    // permission after onPermissionRequired or lifecycle restoration. The
+    // reader must honor persisted denial across restart until repair completes.
+    confirmCurrentPermission() {
+      if (withdrawalPromise) return withdrawalPromise
+      if (withdrawalNeedsRepair) return withdrawConsent()
+      // Never queue a confirmation made during denial; it must not turn into a
+      // grant if a later explicit host opt-in wins the lock race.
+      if (!hostAllows()) return Promise.resolve(permissionBlocked())
+      return withHostConsentLock(async () => {
+        if (!hostAllows()) return permissionBlocked()
+        const result = await client.confirmConsent(readAllowedPermission)
+        // A host withdrawal can close its synchronous gate while this host lock
+        // is held. Do not let a stale positive provider result leave a grant.
+        if (!hostAllows() && result.status === "confirmed") {
+          const withdrawal = await client.withdrawConsent()
+          withdrawalNeedsRepair = !(withdrawal.globalWithdrawalCommitted === true && withdrawal.revocationCleared === true)
+          return withdrawal
+        }
+        if (result.safeDiagnosticCode === "withdrawalIncomplete" ||
+            result.globalWithdrawalCommitted === false || result.revocationCleared === false) {
+          withdrawalNeedsRepair = true
+        }
+        return result
+      })
+    },
+
+    // Call only after the game has committed the transition. The caller must
+    // capture eventProperties at that point; the SDK snapshots them on call.
+    trackCommittedTransition: trackWithPermission(
+      (eventName, eventProperties) => {
+        if (typeof eventName !== "string") throw new TypeError("eventName must be a string")
+        const detachedEventName = snapshotJson(eventName)
+        const captured = captureTrackClock()
+        return {
+          now: captured.now,
+          snapshot: {
+            eventName: detachedEventName,
+            eventParams: snapshotJson(eventProperties),
+            eventTimestamp: captured.eventTimestamp,
+          },
+        }
+      },
+      snapshot => client.track(snapshot),
+    ),
+
+    trackCommittedTransitions: trackWithPermission(
+      events => {
+        const captured = captureTrackClock()
+        if (!Array.isArray(events) || events.length === 0 || events.length > maxTrackBatchEvents) {
+          throw new RangeError("Event batch size is outside the configured limit")
+        }
+        return {
+          now: captured.now,
+          snapshot: snapshotJson(events, maxSnapshotDepth + 1).map(({ eventName, eventProperties }) => ({
+            eventName,
+            eventParams: eventProperties,
+            eventTimestamp: captured.eventTimestamp,
+          })),
+        }
+      },
+      snapshots => client.trackBatch(snapshots),
+    ),
+
+    flush(options) {
+      if (withdrawalNeedsRepair || !hostAllows()) {
+        return Promise.resolve({ status: "paused", safeDiagnosticCode: "consentWithdrawn" })
+      }
+      let snapshot
+      try { snapshot = snapshotJson(options === undefined ? {} : options, 2) }
+      catch { return Promise.resolve(invalidEvent()) }
+      if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+        return Promise.resolve(invalidEvent())
+      }
+      const timeoutMs = snapshot.timeoutMs === undefined
+        ? (config.flushTimeoutMs ?? 15000)
+        : snapshot.timeoutMs
+      if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 60000) {
+        return Promise.resolve(invalidEvent())
+      }
+      const startedAt = globalThis.performance?.now?.() ?? Date.now()
+      const controller = new AbortController()
+      let timer
+      const timeoutResult = () => ({ status: "timeout", safeDiagnosticCode: "flushDeadline" })
+      const deadline = new Promise(resolve => {
+        timer = setTimeout(() => {
+          controller.abort()
+          resolve(timeoutResult())
+        }, timeoutMs)
+      })
+      // Start the deadline before requesting the host lock. If the caller times
+      // out in this wait, abort removes the queued request instead of letting a
+      // later opt-in unexpectedly start the old flush.
+      const operation = withHostConsentLock(
+        () => !withdrawalNeedsRepair && hostAllows(),
+        controller.signal,
+      ).then(allowed => {
+        if (controller.signal.aborted) return timeoutResult()
+        if (!allowed) return { status: "paused", safeDiagnosticCode: "consentWithdrawn" }
+        const now = globalThis.performance?.now?.() ?? Date.now()
+        const remainingMs = timeoutMs - (now - startedAt)
+        if (remainingMs <= 0) {
+          controller.abort()
+          return timeoutResult()
+        }
+        // The Fetch wrapper independently rechecks consent at actual request
+        // start, without retaining this host lock until the response settles.
+        return client.flush({ ...snapshot, timeoutMs: remainingMs })
+      }).catch(() => controller.signal.aborted ? timeoutResult() : busyResult())
+      return Promise.race([operation, deadline]).finally(() => clearTimeout(timer))
+    },
+
+    getDiagnostics() { return client.getDiagnostics() },
+
+    listQuarantined() { return client.listQuarantined() },
+
+    retryQuarantined(handles, options) {
+      if (withdrawalNeedsRepair || !hostAllows()) return Promise.resolve(recoveryBlocked())
+      let handleSnapshot, optionSnapshot
+      try {
+        handleSnapshot = snapshotJson(handles, 2)
+        optionSnapshot = snapshotJson(options ?? {}, 2)
+      } catch { return Promise.resolve(invalidEvent()) }
+      return withHostConsentLock(() => !withdrawalNeedsRepair && hostAllows())
+        .then(allowed => allowed
+          ? client.retryQuarantined(handleSnapshot, optionSnapshot)
+          : recoveryBlocked())
+    },
+
+    discardQuarantined(handles, options) {
+      if (withdrawalNeedsRepair || !hostAllows()) return Promise.resolve(recoveryBlocked())
+      let handleSnapshot, optionSnapshot
+      try {
+        handleSnapshot = snapshotJson(handles, 2)
+        optionSnapshot = snapshotJson(options ?? {}, 2)
+      } catch { return Promise.resolve(invalidEvent()) }
+      return withHostConsentLock(() => !withdrawalNeedsRepair && hostAllows())
+        .then(allowed => allowed
+          ? client.discardQuarantined(handleSnapshot, optionSnapshot)
+          : recoveryBlocked())
+    },
+
+    validateAndResume(options) {
+      if (withdrawalNeedsRepair || !hostAllows()) return Promise.resolve(recoveryBlocked())
+      let optionSnapshot
+      try { optionSnapshot = snapshotJson(options ?? {}, 2) }
+      catch { return Promise.resolve(invalidEvent()) }
+      // Sender fetch independently rechecks at request start after this lock is
+      // released, so an intervening host withdrawal cannot send the probe.
+      return withHostConsentLock(() => !withdrawalNeedsRepair && hostAllows())
+        .then(allowed => allowed
+          ? client.validateAndResume(optionSnapshot)
+          : recoveryBlocked())
+    },
+
+    withdrawConsent,
+
+    getRecoveryState() {
+      // Handles are opaque and ephemeral; obtain a fresh list and revisions
+      // before any explicit retry or discard action.
+      return Promise.all([client.getDiagnostics(), client.listQuarantined()])
+        .then(([diagnostics, quarantined]) => ({ diagnostics, quarantined }))
+    },
+
+    dispose() {
+      client.dispose()
+    },
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "rawbbit-game-events",
+  "version": "0.2.2",
+  "description": "Design and maintain Rawbbit game events with bundled SDKs and optional live compatibility lookup.",
+  "license": "Apache-2.0",
+  "extensions": {
+    "com.openai": {
+      "requires_local_executor": true,
+      "interface": {
+        "displayName": "Rawbbit Game Event Tracking",
+        "shortDescription": "Plan and track game events",
+        "longDescription": "Design a game-specific Rawbbit event map, integrate approved events with the bundled Unity or browser-game SDK, and maintain or migrate existing analytics events. An optional public read-only MCP catalog provides current SDK revisions, target evidence, and Collector contract facts; it does not receive game source, app IDs, keys, or telemetry. The bundled SDKs remain available offline. A local game checkout and desktop execution are required. Unity Editor and device compatibility must be verified in the consuming game; the package does not claim universal target support.",
+        "developerName": "Rawbbit",
+        "category": "Developer Tools",
+        "capabilities": [
+          "Design game-specific event maps",
+          "Integrate bundled Unity and browser-game SDKs",
+          "Migrate and maintain existing game events",
+          "Check public SDK compatibility evidence"
+        ],
+        "websiteURL": "https://rawbbit.one/",
+        "defaultPrompt": [
+          "Inspect this game and propose a Rawbbit event map without changing code.",
+          "Integrate the approved Rawbbit events into this browser game using the bundled SDK.",
+          "Review existing game events and plan a safe migration to Rawbbit."
+        ],
+        "brandColor": "#01292E",
+        "brandColorDark": "#6ADDC8",
+        "composerIcon": "./assets/rawbbit-icon.svg",
+        "logo": "./assets/rawbbit-icon.svg"
+      }
+    }
+  }
+}

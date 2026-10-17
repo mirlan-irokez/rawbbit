@@ -1,0 +1,43 @@
+{
+  "name": "@rawbbit/browser-game",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Consent-gated, durable browser-game analytics for the Rawbbit Collector",
+  "type": "module",
+  "license": "Apache-2.0",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/index.js",
+    "index.d.ts",
+    "README.md",
+    "INTEGRATION.md",
+    "CHANGELOG.md",
+    "examples"
+  ],
+  "scripts": {
+    "test": "node --test __tests__/*.test.js",
+    "test:browser": "npm run build && playwright test",
+    "test:source-isolation": "node scripts/check-source-isolation.mjs",
+    "build": "node build.mjs",
+    "benchmark": "npm run build && node browser-tests/benchmark.mjs",
+    "prepack": "npm run build",
+    "test:types": "tsc --noEmit --strict --lib ES2022,DOM __tests__/types.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@babel/parser": "7.28.4",
+    "@playwright/test": "1.64.0",
+    "esbuild": "0.28.2",
+    "fake-indexeddb": "6.2.5",
+    "typescript": "7.0.2"
+  }
+}

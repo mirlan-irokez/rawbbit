@@ -1,0 +1,16 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "rawbbit-sdk-catalog": {
+      "type": "streamable-http",
+      "url": "https://sdk-catalog.rawbbit.one/mcp",
+      "extensions": {
+        "com.openai": {
+          "auth": {
+            "type": "none"
+          }
+        }
+      }
+    }
+  }
+}

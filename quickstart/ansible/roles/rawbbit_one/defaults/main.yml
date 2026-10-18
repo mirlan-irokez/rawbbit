@@ -16,7 +16,13 @@ rawbbit_one_log_level: INFO
 rawbbit_one_nats_stream_max_age_seconds: 86400
 rawbbit_one_nats_fetch_batch: 200
 rawbbit_one_raw_flush_interval_seconds: 60
-rawbbit_one_nats_max_ack_pending: 1000
+rawbbit_one_nats_max_ack_pending: 10000
+# Optional cap on raw-writer buffered events; empty keeps 80% of max_ack_pending.
+rawbbit_one_raw_max_buffered_events: ""
+rawbbit_one_collector_uvicorn_workers: 1
+rawbbit_one_nats_max_inflight_publishes: 512
+# Seconds raw-writer must stay up without restarting before the deploy is accepted.
+rawbbit_one_raw_writer_stability_seconds: 60
 # Pin the ephemeral NATS administration CLI used for state-changing updates.
 rawbbit_one_nats_box_image: natsio/nats-box@sha256:ffce8bd103383f179f8c7f11cf645726acf5d17280706c530c3b342dbe16334c
 rawbbit_one_seaweed_volume_size_limit_mb: 5000

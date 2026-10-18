@@ -41,7 +41,7 @@ services:
       - ./nats-server.conf:/etc/nats/nats-server.conf:ro
 
   collector-api:
-    image: ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.7
+    image: ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.8
     restart: unless-stopped
     logging: *default-logging
     env_file: *env-files
@@ -51,8 +51,10 @@ services:
       - nats
 
   raw-writer:
-    image: ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.8
+    image: ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.10
     restart: unless-stopped
+    # Time to flush and ACK buffered events after SIGTERM before Docker kills it.
+    stop_grace_period: 30s
     logging: *default-logging
     env_file: *env-files
     depends_on:

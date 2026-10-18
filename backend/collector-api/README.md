@@ -22,7 +22,7 @@ That separation keeps request handling narrow and leaves durable storage and dow
 Public GHCR image:
 
 ```text
-ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.7
+ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.8
 ```
 
 The service listens on `PORT`, defaulting to `8080`. It needs NATS connectivity and collector API-key configuration through environment variables.

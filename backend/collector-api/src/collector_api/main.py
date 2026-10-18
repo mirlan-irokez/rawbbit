@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from collector_api.auth import assert_api_key_allowed
 from collector_api.geoip import GeoIPCountryResolver, extract_client_ip
-from collector_api.nats_publisher import NATSPublisher
+from collector_api.nats_publisher import BatchPublishError, NATSPublisher
 from collector_api.schemas import EventBatchRequest, EventBatchResponse
 from collector_api.settings import Settings, get_settings
 from collector_api.utils import hash_ip, subject_for_app
@@ -53,6 +53,7 @@ publisher = NATSPublisher(
     subject_prefix=settings.nats_subject_prefix,
     stream_max_age_seconds=settings.nats_stream_max_age_seconds,
     duplicate_window_seconds=settings.nats_duplicate_window_seconds,
+    max_inflight_publishes=settings.nats_max_inflight_publishes,
 )
 geoip_resolver = GeoIPCountryResolver(enabled=settings.geoip_enabled, mmdb_path=settings.geoip_mmdb_path)
 
@@ -95,7 +96,7 @@ def _auth_error_reason(detail: str) -> str:
 @app.on_event("startup")
 async def startup_event() -> None:
     logger.info(
-        "startup env=%s port=%s nats_url=%s stream=%s subject_prefix=%s max_request_bytes=%s max_events_per_request=%s cors_enabled=%s geoip_enabled=%s geoip_mmdb_path=%s",
+        "startup env=%s port=%s nats_url=%s stream=%s subject_prefix=%s max_request_bytes=%s max_events_per_request=%s max_inflight_publishes=%s cors_enabled=%s geoip_enabled=%s geoip_mmdb_path=%s",
         settings.env,
         settings.port,
         _redacted_url(settings.nats_url),
@@ -103,6 +104,7 @@ async def startup_event() -> None:
         settings.nats_subject_prefix,
         settings.max_request_bytes,
         settings.max_events_per_request,
+        settings.nats_max_inflight_publishes,
         bool(settings.cors_origins_list),
         settings.geoip_enabled,
         settings.geoip_mmdb_path,
@@ -168,27 +170,30 @@ async def ingest_events(
         logger.warning("request_rejected reason=%s events=%s", reason, len(payload.events))
         raise
 
-    published_events = 0
-    for event in payload.events:
-        subject = subject_for_app(settings.nats_subject_prefix, event.app_id)
-        msg_id = f"{event.app_id}:{event.event_id}"
-        enriched_payload = _enrich_event(event.model_dump(mode="json"), request, request_id, settings)
+    messages = [
+        (
+            subject_for_app(settings.nats_subject_prefix, event.app_id),
+            _enrich_event(event.model_dump(mode="json"), request, request_id, settings),
+            f"{event.app_id}:{event.event_id}",
+        )
+        for event in payload.events
+    ]
 
-        try:
-            await publisher.publish(subject=subject, payload=enriched_payload, msg_id=msg_id)
-            published_events += 1
-        except Exception as exc:
-            logger.error(
-                "publish_failed request_id=%s app_id=%s published_events=%s error_class=%s",
-                request_id,
-                event.app_id,
-                published_events,
-                exc.__class__.__name__,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Failed to publish events",
-            ) from exc
+    try:
+        await publisher.publish_batch(messages)
+    except BatchPublishError as exc:
+        logger.error(
+            "publish_failed request_id=%s events=%s published_events=%s failed_events=%s error_class=%s",
+            request_id,
+            len(messages),
+            exc.published,
+            exc.failed,
+            exc.first_error.__class__.__name__,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Failed to publish events",
+        ) from exc
 
     publish_ms = int((time.perf_counter() - started) * 1000)
     distinct_apps = len({event.app_id for event in payload.events})

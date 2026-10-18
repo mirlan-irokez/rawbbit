@@ -524,3 +524,66 @@
   retries: 12
   delay: 10
   until: rawbbit_one_dozzle_health.status == 200
+
+- name: Find the raw-writer container
+  ansible.builtin.command:
+    argv:
+      - docker
+      - compose
+      - -f
+      - docker-compose.yml
+      - -f
+      - docker-compose.dozzle.yml
+      - ps
+      - --quiet
+      - raw-writer
+  args:
+    chdir: "{{ rawbbit_one_install_dir }}"
+  become: false
+  changed_when: false
+  register: rawbbit_one_raw_writer_container
+
+- name: Require a raw-writer container
+  ansible.builtin.assert:
+    that:
+      - rawbbit_one_raw_writer_container.stdout | trim | length > 0
+    fail_msg: The raw-writer container is not running.
+
+- name: Inspect raw-writer before the stability window
+  ansible.builtin.command:
+    argv:
+      - docker
+      - inspect
+      - "{{ rawbbit_one_raw_writer_container.stdout | trim }}"
+  become: false
+  changed_when: false
+  register: rawbbit_one_raw_writer_before
+
+- name: Wait for raw-writer to prove it stays up
+  ansible.builtin.pause:
+    seconds: "{{ rawbbit_one_raw_writer_stability_seconds | int }}"
+
+- name: Inspect raw-writer after the stability window
+  ansible.builtin.command:
+    argv:
+      - docker
+      - inspect
+      - "{{ rawbbit_one_raw_writer_container.stdout | trim }}"
+  become: false
+  changed_when: false
+  register: rawbbit_one_raw_writer_after
+
+- name: Verify raw-writer did not restart
+  vars:
+    before: "{{ (rawbbit_one_raw_writer_before.stdout | from_json)[0] }}"
+    after: "{{ (rawbbit_one_raw_writer_after.stdout | from_json)[0] }}"
+  ansible.builtin.assert:
+    that:
+      - after.State.Running | bool
+      - not (after.State.Restarting | bool)
+      - (after.RestartCount | int) == (before.RestartCount | int)
+    fail_msg: >-
+      raw-writer is not staying up (running={{ after.State.Running }},
+      restarting={{ after.State.Restarting }}, restarts {{ before.RestartCount }}
+      -> {{ after.RestartCount }}). Check its logs with
+      docker compose logs --tail=100 raw-writer in {{ rawbbit_one_install_dir }}.

@@ -22,7 +22,7 @@ It preserves raw events in a portable format that downstream query engines and m
 Public GHCR image:
 
 ```text
-ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.8
+ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.10
 ```
 
 The worker needs NATS connectivity and raw-storage configuration through environment variables. It can write to GCS or an S3-compatible object store such as SeaweedFS.

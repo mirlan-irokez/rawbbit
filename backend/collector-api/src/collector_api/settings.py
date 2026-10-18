@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     nats_subject_prefix: str = Field(default="events", alias="NATS_SUBJECT_PREFIX")
     nats_stream_max_age_seconds: int = Field(default=604800, alias="NATS_STREAM_MAX_AGE_SECONDS")
     nats_duplicate_window_seconds: int = Field(default=600, alias="NATS_DUPLICATE_WINDOW_SECONDS")
+    nats_max_inflight_publishes: int = Field(default=512, ge=1, alias="NATS_MAX_INFLIGHT_PUBLISHES")
 
     max_events_per_request: int = Field(default=500, alias="MAX_EVENTS_PER_REQUEST")
     max_request_bytes: int = Field(default=1_048_576, alias="MAX_REQUEST_BYTES")

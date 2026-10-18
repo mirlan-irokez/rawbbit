@@ -12,6 +12,16 @@ from nats.js.api import StorageType, StreamConfig
 logger = logging.getLogger("collector_api.nats")
 
 
+class BatchPublishError(Exception):
+    """Raised when at least one event of a batch failed to publish."""
+
+    def __init__(self, published: int, failed: int, first_error: BaseException) -> None:
+        super().__init__(f"{failed} of {published + failed} events failed to publish")
+        self.published = published
+        self.failed = failed
+        self.first_error = first_error
+
+
 def _redacted_url(url: str) -> str:
     parts = urlsplit(url)
     host = parts.hostname or ""
@@ -31,6 +41,7 @@ class NATSPublisher:
         subject_prefix: str,
         stream_max_age_seconds: int,
         duplicate_window_seconds: int,
+        max_inflight_publishes: int = 512,
     ) -> None:
         self._nats_url = nats_url
         self._stream_name = stream_name
@@ -39,7 +50,8 @@ class NATSPublisher:
         self._duplicate_window_seconds = duplicate_window_seconds
         self._nc = NATS()
         self._js = None
-        self._lock = asyncio.Lock()
+        # Caps JetStream publishes awaiting an ACK across all requests in this process.
+        self._inflight = asyncio.Semaphore(max_inflight_publishes)
 
     async def connect(self) -> None:
         logger.info(
@@ -83,8 +95,23 @@ class NATSPublisher:
         assert self._js is not None
         data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         headers = {"Nats-Msg-Id": msg_id}
-        async with self._lock:
+        async with self._inflight:
             await self._js.publish(subject=subject, payload=data, headers=headers)
+
+    async def publish_batch(self, messages: list[tuple[str, dict[str, Any], str]]) -> None:
+        """Publish (subject, payload, msg_id) tuples concurrently and wait for every ACK.
+
+        Order within the batch is not preserved. Every event is attempted; if any fails,
+        BatchPublishError reports how many succeeded. Retries are safe because JetStream
+        deduplicates on Nats-Msg-Id within the duplicate window.
+        """
+        results = await asyncio.gather(
+            *(self.publish(subject=subject, payload=payload, msg_id=msg_id) for subject, payload, msg_id in messages),
+            return_exceptions=True,
+        )
+        errors = [result for result in results if isinstance(result, BaseException)]
+        if errors:
+            raise BatchPublishError(published=len(results) - len(errors), failed=len(errors), first_error=errors[0])
 
     async def close(self) -> None:
         if self._nc.is_connected:

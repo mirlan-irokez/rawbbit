@@ -1,5 +1,9 @@
 FROM python:3.13-slim
 
+LABEL org.opencontainers.image.source="https://github.com/mirlan-irokez/rawbbit"
+LABEL org.opencontainers.image.description="Rawbbit raw writer"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app/src

@@ -143,8 +143,25 @@ The role accepts positive integer-form values, requires a flush interval below
 the fixed 300-second ACK wait, and requires Max Ack Pending to be at least the
 fetch batch.
 
+raw-writer reads the consumer's Max Ack Pending from the server at start-up and
+after every flush interval, and flushes early once its buffer reaches 80% of it,
+so a value changed here takes effect without restarting raw-writer.
+
+After Compose starts, the role also waits
+`rawbbit_one_raw_writer_stability_seconds` (default `60`) and fails the deploy if
+the raw-writer container stopped or restarted in that window, for example
+because its settings were rejected at start-up.
+
+Optional collector and raw-writer tuning, with the role fallbacks:
+
+```yaml
+rawbbit_one_collector_uvicorn_workers: 1
+rawbbit_one_nats_max_inflight_publishes: 512
+rawbbit_one_raw_max_buffered_events: ""   # empty = 80% of Max Ack Pending
+```
+
 If a key is omitted, the role fallback is `200` for the fetch batch, `60` seconds
-for the flush interval, and `1000` for Max Ack Pending. Once the role runs,
+for the flush interval, and `10000` for Max Ack Pending. Once the role runs,
 `rawbbit_one_nats_max_ack_pending` is Ansible-managed consumer state; set it
 explicitly in an existing inventory if you need to preserve a manually chosen
 value rather than adopting the fallback.

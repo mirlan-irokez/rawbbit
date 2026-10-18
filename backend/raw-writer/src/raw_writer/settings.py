@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field, ValidationError, model_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     nats_fetch_timeout_seconds: float = Field(default=1.0, alias="NATS_FETCH_TIMEOUT_SECONDS")
     nats_ack_wait_seconds: int = Field(default=120, alias="NATS_ACK_WAIT_SECONDS")
     nats_max_deliver: int = Field(default=10, alias="NATS_MAX_DELIVER")
+    # Used only when raw-writer creates the durable consumer; an existing consumer is never changed.
+    nats_max_ack_pending: int = Field(default=10000, ge=1, alias="NATS_MAX_ACK_PENDING")
 
     raw_storage_backend: str = Field(default="gcs", alias="RAW_STORAGE_BACKEND")
 
@@ -39,6 +41,25 @@ class Settings(BaseSettings):
     raw_flush_interval_seconds: int = Field(default=60, alias="RAW_FLUSH_INTERVAL_SECONDS")
     raw_max_events_per_file: int = Field(default=1000, alias="RAW_MAX_EVENTS_PER_FILE")
     raw_max_bytes_per_file: int = Field(default=4_194_304, alias="RAW_MAX_BYTES_PER_FILE")
+    # Optional cap on buffered events across all partitions; can only lower the consumer-derived threshold.
+    raw_max_buffered_events: int | None = Field(default=None, ge=1, alias="RAW_MAX_BUFFERED_EVENTS")
+
+    @field_validator("raw_max_buffered_events", mode="before")
+    @classmethod
+    def empty_buffered_events_is_unset(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @model_validator(mode="after")
+    def validate_flush_timing(self) -> "Settings":
+        if self.raw_flush_interval_seconds >= self.nats_ack_wait_seconds:
+            raise ValueError(
+                "RAW_FLUSH_INTERVAL_SECONDS must be lower than NATS_ACK_WAIT_SECONDS "
+                f"(got {self.raw_flush_interval_seconds} >= {self.nats_ack_wait_seconds}); "
+                "otherwise buffered messages are redelivered before they are flushed"
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_storage_backend(self) -> "Settings":
@@ -79,4 +100,6 @@ def get_settings() -> Settings:
     try:
         return Settings()
     except ValidationError as exc:
-        raise RuntimeError(f"Invalid raw-writer settings: {exc}") from exc
+        # Report messages only: the default error text echoes the input, including S3 secrets.
+        problems = "; ".join(error["msg"] for error in exc.errors(include_url=False, include_input=False))
+        raise RuntimeError(f"Invalid raw-writer settings: {problems}") from None

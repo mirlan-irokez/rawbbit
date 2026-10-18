@@ -40,6 +40,8 @@ These settings control the durable buffer between ingress and raw storage.
 Main variables:
 
 - `PORT`
+- `UVICORN_WORKERS` (default `1`)
+- `NATS_MAX_INFLIGHT_PUBLISHES` (default `512`)
 - `COLLECTOR_API_KEYS_JSON`
 - `MAX_EVENTS_PER_REQUEST`
 - `MAX_REQUEST_BYTES`
@@ -56,6 +58,8 @@ Main variables:
 Notes:
 
 - `COLLECTOR_API_KEYS_JSON` is a JSON map of `{ "api_key": "app_id" }`
+- the collector publishes a batch's events concurrently, up to `NATS_MAX_INFLIGHT_PUBLISHES` per worker process; if any event fails, the whole request returns `503` and is safe to retry, because JetStream deduplicates on `Nats-Msg-Id` (`<app_id>:<event_id>`) within `NATS_DUPLICATE_WINDOW_SECONDS`
+- event order within a batch is not preserved in the stream
 - browser ingestion requires correct HTTPS and CORS configuration
 - API keys, salts, and credentials should come from private environment or secret management, not committed files
 - if GeoIP enrichment uses DB-IP data and your web application displays or uses those geolocation results, include the required attribution link in the UI: `<a href='https://db-ip.com'>IP Geolocation by DB-IP</a>`
@@ -70,11 +74,20 @@ Main variables:
 - `NATS_FETCH_TIMEOUT_SECONDS`
 - `NATS_ACK_WAIT_SECONDS`
 - `NATS_MAX_DELIVER`
+- `NATS_MAX_ACK_PENDING` (default `10000`)
 - `RAW_FLUSH_INTERVAL_SECONDS`
 - `RAW_MAX_EVENTS_PER_FILE`
 - `RAW_MAX_BYTES_PER_FILE`
+- `RAW_MAX_BUFFERED_EVENTS` (optional)
 
 These settings control how aggressively queued events are batched and flushed into Parquet.
+
+Notes:
+
+- `RAW_FLUSH_INTERVAL_SECONDS` must be lower than `NATS_ACK_WAIT_SECONDS`; raw-writer refuses to start otherwise
+- raw-writer flushes early when its buffer across all partitions reaches 80% of the consumer's `max_ack_pending`, largest partitions first, so many apps or hour boundaries can't stall delivery; `RAW_MAX_BUFFERED_EVENTS` can only lower that threshold
+- `NATS_MAX_ACK_PENDING` applies only when raw-writer creates the durable consumer; an existing consumer keeps its configuration
+- on SIGTERM, raw-writer flushes and ACKs its buffer before exiting; give the container a stop grace period (the VM-one quickstart uses 30 seconds)
 
 ## Object-storage settings
 

@@ -127,8 +127,8 @@ For the test event and landing check, see
 
 Rawbbit publishes public service images to GHCR:
 
-- `ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.7`
-- `ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.8`
+- `ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.8`
+- `ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.10`
 - `ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2`
 - `ghcr.io/mirlan-irokez/rawbbit-dbt-runner:0.1.1`
 

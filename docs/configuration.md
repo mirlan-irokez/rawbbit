@@ -1,6 +1,6 @@
 # Configuration
 
-The canonical environment-variable reference for the public stack is `backend/deploy/.env.example`.
+The canonical environment-variable reference for the ingestion VM is `quickstart/vm_rawbbit_one/.env.example`. The Ansible path renders the same variables from `quickstart/ansible/roles/rawbbit_one/templates/env.j2`.
 
 This guide groups the main settings by responsibility.
 
@@ -174,7 +174,7 @@ See [`../dbt_project/README.md`](../dbt_project/README.md) and the
 
 ## Downstream Rawbbit MCP server and Metabase settings
 
-The ingestion runtime uses `backend/deploy/.env.example` as its canonical configuration reference.
+The ingestion runtime uses `quickstart/vm_rawbbit_one/.env.example` as its canonical configuration reference.
 
 The optional Rawbbit MCP server and combined Metabase deployment has its own environment file under `mcp-server/.env.example` in the public repository.
 

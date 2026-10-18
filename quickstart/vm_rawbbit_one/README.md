@@ -966,6 +966,52 @@ docker run --rm --network rawbbit-one_default natsio/nats-box:latest \
 
 Confirm the reported maximum age is `24h0m0s`.
 
+### Send a test event
+
+Use an API key and `app_id` pair from your `COLLECTOR_API_KEYS_JSON`:
+
+```bash
+curl -sS -X POST https://collector.yourdomain.com/v1/events:batch \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: dev-api-key' \
+  -d '{"events":[{"event_id":"00000000-0000-0000-0000-000000000001","app_id":"com.example.mygame","environment":"dev","event_name":"level_completed","event_timestamp":"2026-03-20T18:42:15.123Z","user":{"user_pseudo_id":"player_anon_001","session_id":"session_001"},"event_params":{"level_id":3,"duration_sec":91,"platform":"webgl"}}]}'
+```
+
+Expected response shape:
+
+```json
+{"request_id":"...","accepted_events":1}
+```
+
+### Check that Parquet landed
+
+raw-writer flushes buffered events every `RAW_FLUSH_INTERVAL_SECONDS` (60
+seconds by default). After that, list the raw prefix with the admin credential:
+
+```bash
+aws s3 ls --recursive s3://rawbbit_raw/raw/ --endpoint-url https://s3.yourdomain.com
+```
+
+Expected partition layout:
+
+```text
+raw/app_id=com.example.mygame/event_date=YYYY-MM-DD/hour=HH/
+```
+
+If nothing lands, check:
+
+- invalid or missing `X-API-Key`, or an `app_id` the key isn't allowed to send
+- the collector and raw-writer logs (see [Logs](#logs), or Dozzle if enabled)
+- the raw-writer consumer:
+
+  ```bash
+  docker run --rm --network rawbbit-one_default natsio/nats-box:latest \
+    nats --server nats://nats:4222 consumer info EVENTS raw-writer
+  ```
+
+- raw-writer unable to authenticate to SeaweedFS (check the `S3_*` writer
+  credentials)
+
 ## Logs
 
 All services write to stdout/stderr. Docker rotates logs with:

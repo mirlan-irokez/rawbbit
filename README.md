@@ -65,7 +65,6 @@ This repository contains the public game-telemetry ingestion-to-analytics path:
 
 - `backend/collector-api` — HTTP ingestion service for player, gameplay, product, and server events
 - `backend/raw-writer` — JetStream consumer that writes partitioned Parquet files
-- `backend/deploy/` — Docker Compose and environment scaffolding for local or simple self-hosted setups
 - `clickhouse/` — main analytical/query path for loading and querying raw game telemetry in ClickHouse
 - `dbt_project/` — scheduled dbt Core ingestion from bounded Parquet windows into `analytics.events`
 - `mcp-server/` — Rawbbit MCP server, MCP client setup, and combined MCP + Metabase deployment guide
@@ -114,17 +113,15 @@ Parquet windows from the VM-one S3-compatible endpoint and loads them into
 ClickHouse. It also documents optional Dozzle browser log access and Dozzle MCP
 access for inspecting analytics VM containers.
 
-For local validation and development, keep using [`docs/quickstart.md`](docs/quickstart.md).
+The shortest path to a working ingestion setup is:
 
-The shortest path to a working local setup is:
+1. deploy VM one with the [Ansible quickstart](quickstart/ansible/README.md)
+   (or the manual [VM-one guide](quickstart/vm_rawbbit_one/README.md))
+2. send a test player event to `POST /v1/events:batch`
+3. verify that Parquet files land in object storage
 
-1. copy `backend/deploy/.env.example` to `backend/deploy/.env`
-2. set API keys, object-storage bucket, and credentials
-3. start the stack with Docker Compose
-4. send a test player event to `POST /v1/events:batch`
-5. verify that Parquet files land in object storage
-
-For the full local walkthrough, see [`docs/quickstart.md`](docs/quickstart.md).
+For the test event and landing check, see
+[VM-one verification](quickstart/vm_rawbbit_one/README.md#verification).
 
 ## Published images
 
@@ -137,16 +134,18 @@ Rawbbit publishes public service images to GHCR:
 
 The same images also have `latest` tags for convenience. Prefer pinned version tags for deployments.
 
-You can run the stack in two ways:
-
-- build from source with Docker Compose while developing or validating local changes
-- pull the public GHCR images for repeatable OSS deployments
+The quickstart deployments pull these pinned images. To run local changes,
+build an image from the service folder (for example
+`docker build -t my-collector-api backend/collector-api`) and set that image in
+`quickstart/vm_rawbbit_one/docker-compose.yml`.
 
 Secrets are not baked into these images. Provide API keys, storage credentials, ClickHouse passwords, and MCP bearer tokens through private `.env` files or secret management.
 
 ## Configuration
 
-The ingestion VM uses `backend/deploy/.env.example`; the ClickHouse/dbt
+The ingestion VM uses `quickstart/vm_rawbbit_one/.env.example` (the Ansible
+path renders the same variables from
+`quickstart/ansible/roles/rawbbit_one/templates/env.j2`); the ClickHouse/dbt
 analytics VM uses `quickstart/vm_rawbbit_two/.env.example`.
 
 Important configuration groups:
@@ -165,7 +164,6 @@ For the grouped configuration guide, see [`docs/configuration.md`](docs/configur
 backend/
   collector-api/   HTTP ingestion service
   raw-writer/      Parquet landing worker
-  deploy/          Local and self-hosted runtime scaffolding
 sqlmesh_project/   Optional BigQuery SQLMesh starter model
 clickhouse/        Main ClickHouse query/loading path
 dbt_project/       Scheduled ClickHouse ingestion project
@@ -187,7 +185,6 @@ Component reference notes:
 - [`backend/README.md`](backend/README.md)
 - [`backend/collector-api/README.md`](backend/collector-api/README.md)
 - [`backend/raw-writer/README.md`](backend/raw-writer/README.md)
-- [`backend/deploy` runtime notes](backend/deploy/README.md)
 - [`clickhouse/README.md`](clickhouse/README.md)
 - [`dbt_project/README.md`](dbt_project/README.md)
 - [`mcp-server/README.md`](mcp-server/README.md)
@@ -223,7 +220,6 @@ The included [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) model is inten
 - [`quickstart/ansible/README.md`](quickstart/ansible/README.md)
 - [`quickstart/vm_rawbbit_one/README.md`](quickstart/vm_rawbbit_one/README.md)
 - [`quickstart/vm_rawbbit_two/README.md`](quickstart/vm_rawbbit_two/README.md)
-- [`docs/quickstart.md`](docs/quickstart.md)
 - [`docs/configuration.md`](docs/configuration.md)
 - [`clickhouse/README.md`](clickhouse/README.md)
 - [`dbt_project/README.md`](dbt_project/README.md)

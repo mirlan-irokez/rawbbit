@@ -399,7 +399,7 @@ See [`../mcp-server/README.md`](../mcp-server/README.md).
 
 - [`../docs/architecture.md`](../docs/architecture.md)
 - [`../docs/configuration.md`](../docs/configuration.md)
-- [`../docs/quickstart.md`](../docs/quickstart.md)
+- [`../quickstart/vm_rawbbit_one/README.md`](../quickstart/vm_rawbbit_one/README.md)
 - [`../dbt_project/README.md`](../dbt_project/README.md)
 - [`../quickstart/vm_rawbbit_two/README.md`](../quickstart/vm_rawbbit_two/README.md)
 - [`../mcp-server/README.md`](../mcp-server/README.md)

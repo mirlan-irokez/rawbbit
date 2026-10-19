@@ -125,16 +125,19 @@ For the test event and landing check, see
 
 ## Published images
 
-Rawbbit publishes public service images to GHCR:
+Rawbbit public service images use GHCR:
 
 - `ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.8`
-- `ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.10`
+- `ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.11` — pending publication
 - `ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2`
 - `ghcr.io/mirlan-irokez/rawbbit-dbt-runner:0.1.1`
 
-The same images also have `latest` tags for convenience. Prefer pinned version tags for deployments.
+Existing published releases also have `latest` tags for convenience. Prefer published pinned version tags for deployments.
 
-The quickstart deployments pull these pinned images. To run local changes,
+The raw-writer `0.1.11` tag is the target for the pending malformed-message isolation release; GHCR publication and public-repository promotion are pending.
+
+The quickstart deployments are configured to pull these pinned images; publish
+the pending raw-writer tag before using that pin. To run local changes,
 build an image from the service folder (for example
 `docker build -t my-collector-api backend/collector-api`) and set that image in
 `quickstart/vm_rawbbit_one/docker-compose.yml`.

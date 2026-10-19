@@ -51,7 +51,7 @@ services:
       - nats
 
   raw-writer:
-    image: ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.10
+    image: ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.11
     restart: unless-stopped
     # Time to flush and ACK buffered events after SIGTERM before Docker kills it.
     stop_grace_period: 30s

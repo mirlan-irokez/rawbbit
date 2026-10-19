@@ -174,7 +174,24 @@ class RawWriterService:
             await msg.term()
             return
 
-        partition_key, row = event_to_row(event, msg)
+        try:
+            partition_key, row = event_to_row(event, msg)
+        except Exception as exc:
+            try:
+                stream_sequence = msg.metadata.sequence.stream
+            except Exception:
+                stream_sequence = None
+            # Never interpolate malformed metadata values into the warning.
+            if type(stream_sequence) is not int:
+                stream_sequence = None
+            logger.warning(
+                "message_transform_failed action=term error_class=%s stream_sequence=%s",
+                exc.__class__.__name__,
+                stream_sequence,
+            )
+            await msg.term()
+            return
+
         buf = self.buffers[partition_key]
         buf.rows.append(row)
         buf.msgs.append(msg)

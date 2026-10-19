@@ -5,8 +5,12 @@ import json
 import os
 import signal
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
+import pyarrow.parquet as pq
 from raw_writer.main import RawWriterService, _install_signal_handlers, buffer_threshold
+from raw_writer.parquet_writer import RAW_SCHEMA
 from raw_writer.settings import Settings
 
 
@@ -39,6 +43,7 @@ class _Msg:
         self.metadata = None
         self.acked = 0
         self.naked = 0
+        self.terminated = 0
 
     async def ack(self) -> None:
         self.acked += 1
@@ -47,7 +52,7 @@ class _Msg:
         self.naked += 1
 
     async def term(self) -> None:
-        pass
+        self.terminated += 1
 
 
 class _Uploader:
@@ -113,6 +118,177 @@ async def _feed(service: RawWriterService, msgs: list[_Msg]) -> None:
     await service.refresh_threshold()
     for msg in msgs:
         await service.handle_message(msg)
+
+
+_POISON = "private-poison-payload-never-log"
+
+
+def _malformed_events() -> list[tuple[str, object]]:
+    events = [("array", []), ("null", None), ("string", _POISON), ("number", 42)]
+    for field in ("user", "device", "ingest"):
+        for label, value in (("array", [_POISON]), ("string", _POISON), ("number", 42), ("bool", True)):
+            events.append((f"{field}_{label}", {field: value, "event_id": _POISON}))
+    return events
+
+
+def _malformed_msg(event: object, sequence: int = 123) -> _Msg:
+    msg = _Msg("invalid", sequence)
+    msg.data = json.dumps(event).encode("utf-8")
+    msg.metadata = SimpleNamespace(stream="EVENTS", sequence=SimpleNamespace(stream=sequence))
+    return msg
+
+
+class MalformedMessageTests(unittest.IsolatedAsyncioTestCase):
+    def _assert_terminal(self, msg: _Msg) -> None:
+        self.assertEqual((msg.terminated, msg.acked, msg.naked), (1, 0, 0))
+
+    def _assert_safe_warning(self, logs, error_class: str, sequence: int | None) -> None:
+        self.assertEqual(len(logs.records), 1)
+        record = logs.records[0]
+        self.assertEqual(record.levelname, "WARNING")
+        self.assertEqual(
+            record.getMessage(),
+            f"message_transform_failed action=term error_class={error_class} stream_sequence={sequence}",
+        )
+        self.assertIsNone(record.exc_info)
+        self.assertIsNone(record.stack_info)
+        self.assertNotIn(_POISON, "\n".join(logs.output))
+
+    async def test_malformed_events_leave_preexisting_buffers_unchanged(self) -> None:
+        for label, event in _malformed_events():
+            with self.subTest(event=label):
+                uploader = _Uploader()
+                service = _service(_Consumer(), uploader)
+                valid = _Msg("existing", 0)
+                await service.handle_message(valid)
+                key, state = next(iter(service.buffers.items()))
+                rows = list(state.rows)
+                approx_bytes = state.approx_bytes
+                msg = _malformed_msg(event)
+
+                with self.assertLogs("raw_writer", level="WARNING") as logs:
+                    await service.handle_message(msg)
+
+                self._assert_terminal(msg)
+                self._assert_safe_warning(logs, "AttributeError", 123)
+                self.assertEqual(service.buffered_events, 1)
+                self.assertEqual(list(service.buffers), [key])
+                self.assertIs(service.buffers[key], state)
+                self.assertEqual(state.rows, rows)
+                self.assertEqual(state.msgs, [valid])
+                self.assertEqual(state.approx_bytes, approx_bytes)
+                self.assertEqual((valid.acked, valid.naked, valid.terminated), (0, 0, 0))
+                self.assertEqual(uploader.object_paths, [])
+
+    async def test_malformed_metadata_cannot_break_terminal_warning(self) -> None:
+        class _RaisingMetadataMsg(_Msg):
+            @property
+            def metadata(self):
+                raise RuntimeError(_POISON)
+
+            @metadata.setter
+            def metadata(self, value):
+                pass
+
+        missing_metadata = _malformed_msg([])
+        del missing_metadata.metadata
+        messages = [missing_metadata, _RaisingMetadataMsg("invalid", 0)]
+        for metadata in (
+            None,
+            object(),
+            SimpleNamespace(sequence=None),
+            SimpleNamespace(sequence=object()),
+            SimpleNamespace(sequence=SimpleNamespace(stream=_POISON)),
+        ):
+            msg = _malformed_msg([])
+            msg.metadata = metadata
+            messages.append(msg)
+
+        for msg in messages:
+            with self.subTest(metadata_type=type(msg).__name__):
+                msg.data = b"[]"
+                service = _service(_Consumer(), _Uploader())
+                with self.assertLogs("raw_writer", level="WARNING") as logs:
+                    await service.handle_message(msg)
+                self._assert_terminal(msg)
+                self._assert_safe_warning(logs, "AttributeError", None)
+                self.assertEqual(service.buffered_events, 0)
+                self.assertEqual(dict(service.buffers), {})
+
+    async def test_exception_content_is_never_formatted_or_logged(self) -> None:
+        class _PoisonError(Exception):
+            str_calls = 0
+
+            def __str__(self) -> str:
+                self.str_calls += 1
+                return _POISON
+
+        error = _PoisonError(_POISON)
+        service = _service(_Consumer(), _Uploader())
+        msg = _malformed_msg({"event_id": _POISON})
+        with (
+            patch("raw_writer.main.event_to_row", side_effect=error) as transform,
+            self.assertLogs("raw_writer", level="WARNING") as logs,
+        ):
+            await service.handle_message(msg)
+        transform.assert_called_once_with({"event_id": _POISON}, msg)
+        self._assert_terminal(msg)
+        self._assert_safe_warning(logs, "_PoisonError", 123)
+        self.assertEqual(error.str_calls, 0)
+        self.assertEqual(service.buffered_events, 0)
+        self.assertEqual(dict(service.buffers), {})
+
+    async def test_run_continues_same_batch_and_flushes_only_valid_parquet(self) -> None:
+        class _ParquetUploader(_Uploader):
+            def __init__(self) -> None:
+                super().__init__()
+                self.tables = []
+
+            def upload_file(self, local_path, object_path: str) -> None:
+                self.tables.append(pq.ParquetFile(local_path).read())
+                super().upload_file(local_path, object_path)
+
+        malformed = [_malformed_msg(event, index) for index, (_, event) in enumerate(_malformed_events())]
+        valid = [_Msg("neighbors", index) for index in range(len(malformed) + 1)]
+        batch = [valid[0]]
+        for bad, good in zip(malformed, valid[1:]):
+            batch.extend([bad, good])
+        uploader = _ParquetUploader()
+        consumer = _Consumer(batches=[batch])
+        service = _service(consumer, uploader)
+        consumer.on_fetch = lambda: service.request_stop() if consumer.fetch_calls == 2 else None
+
+        with self.assertLogs("raw_writer", level="WARNING") as logs:
+            await asyncio.wait_for(service.run(), timeout=2)
+
+        self.assertEqual(consumer.fetch_calls, 2)
+        self.assertEqual(len(logs.records), len(malformed))
+        self.assertNotIn(_POISON, "\n".join(logs.output))
+        for msg in malformed:
+            self._assert_terminal(msg)
+        self.assertEqual(service.buffered_events, len(valid))
+        self.assertEqual(len(service.buffers), 1)
+        state = next(iter(service.buffers.values()))
+        self.assertEqual(state.msgs, valid)
+        self.assertEqual([row["event_id"] for row in state.rows], [f"neighbors-{i}" for i in range(len(valid))])
+        self.assertEqual(state.approx_bytes, sum(len(msg.data) for msg in valid))
+        self.assertTrue(all((msg.acked, msg.naked, msg.terminated) == (0, 0, 0) for msg in valid))
+        self.assertEqual(uploader.object_paths, [])
+
+        await service.flush_all()
+
+        self.assertEqual(len(uploader.tables), 1)
+        table = uploader.tables[0]
+        self.assertEqual(table.schema, RAW_SCHEMA)
+        self.assertEqual(table.column("event_id").to_pylist(), [f"neighbors-{i}" for i in range(len(valid))])
+        self.assertEqual(table.column("app_id").to_pylist(), ["neighbors"] * len(valid))
+        self.assertEqual(table.column("event_name").to_pylist(), ["level_completed"] * len(valid))
+        self.assertEqual(table.column("event_timestamp").to_pylist(), ["2026-01-01T10:00:00Z"] * len(valid))
+        self.assertTrue(all((msg.acked, msg.naked, msg.terminated) == (1, 0, 0) for msg in valid))
+        for msg in malformed:
+            self._assert_terminal(msg)
+        self.assertEqual(service.buffered_events, 0)
+        self.assertEqual(dict(service.buffers), {})
 
 
 class BufferThresholdTests(unittest.TestCase):

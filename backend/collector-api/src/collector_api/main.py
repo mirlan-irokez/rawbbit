@@ -44,6 +44,7 @@ if settings.cors_origins_list:
         allow_credentials=settings.cors_allow_credentials,
         allow_methods=settings.cors_methods_list,
         allow_headers=settings.cors_headers_list,
+        expose_headers=["Retry-After"],
         max_age=settings.cors_max_age_seconds,
     )
 
@@ -63,15 +64,17 @@ def _enrich_event(event_payload: dict, request: Request, request_id: str, cfg: S
     client_ip = extract_client_ip(request)
     ingest = dict(event_payload.get("ingest") or {})
 
-    ingest.setdefault("received_at", now)
-    ingest.setdefault("request_id", request_id)
-    ingest.setdefault("user_agent", request.headers.get("user-agent"))
+    ingest["received_at"] = now
+    ingest["request_id"] = request_id
+    ingest["user_agent"] = request.headers.get("user-agent")
+    ingest["ip_hash"] = hash_ip(client_ip, cfg.ip_hash_salt) if client_ip else None
+
+    if client_ip and cfg.store_raw_ip:
+        ingest["ip"] = client_ip
+    else:
+        ingest.pop("ip", None)
 
     if client_ip:
-        ingest.setdefault("ip_hash", hash_ip(client_ip, cfg.ip_hash_salt))
-        if cfg.store_raw_ip:
-            ingest.setdefault("ip", client_ip)
-
         geo_enrichment = geoip_resolver.lookup_country(client_ip)
         if geo_enrichment:
             geo = dict(event_payload.get("geo") or {})
@@ -79,7 +82,7 @@ def _enrich_event(event_payload: dict, request: Request, request_id: str, cfg: S
             event_payload["geo"] = geo
 
     event_payload["ingest"] = ingest
-    event_payload.setdefault("received_at", now)
+    event_payload["received_at"] = now
     return event_payload
 
 

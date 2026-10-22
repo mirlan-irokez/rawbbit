@@ -128,17 +128,24 @@ For the test event and landing check, see
 Rawbbit public service images use GHCR:
 
 - `ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.8`
-- `ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.11` — pending publication
+- `ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.9` — published
+- `ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.11` — published
 - `ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2`
 - `ghcr.io/mirlan-irokez/rawbbit-dbt-runner:0.1.1`
 
 Existing published releases also have `latest` tags for convenience. Prefer published pinned version tags for deployments.
 
-The raw-writer `0.1.11` tag is the target for the pending malformed-message isolation release; GHCR publication and public-repository promotion are pending.
+Raw-writer `0.1.11` is published and includes malformed-message isolation.
 
-The quickstart deployments are configured to pull these pinned images; publish
-the pending raw-writer tag before using that pin. To run local changes,
-build an image from the service folder (for example
+Collector-api `0.1.9` is published. It adds
+browser exposure of only `Retry-After` and makes collector metadata authoritative:
+body-supplied `received_at`, `ingest.request_id`, `ingest.user_agent`,
+`ingest.ip_hash`, and `ingest.ip` are replaced with server-derived values (raw IP
+is removed when storage is disabled or no valid request IP is available), and
+top-level `received_at` is always populated.
+
+The VM-one quickstart pins collector-api `0.1.9` and raw-writer `0.1.11`. To
+run local changes, build an image from the service folder (for example
 `docker build -t my-collector-api backend/collector-api`) and set that image in
 `quickstart/vm_rawbbit_one/docker-compose.yml`.
 

@@ -19,18 +19,22 @@ That separation keeps request handling narrow and leaves durable storage and dow
 
 ## Published image
 
-Currently published public GHCR image (owner-confirmed 2026-10-22):
+Currently published public GHCR image (owner-confirmed 2026-10-24):
 
 ```text
-ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.9
+ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.10
 ```
 
-Platform: `linux/amd64`; digest:
-`sha256:bbb96b074a42640c8472aaf601c8187f068590b60abc2afe699d9f77f0758941`.
+Platform: `linux/amd64`; OCI index digest:
+`sha256:710e4bcd5347b15d0f1cac819bc5d26320a39026012264c4ba76a0ca98095fce`.
+The `linux/amd64` platform manifest is
+`sha256:48014fa043cc8235251d97e6702e0418d92e5f014a19ff724a271a5117faac7a`;
+the index also includes an attestation manifest.
 
 The service listens on `PORT`, defaulting to `8080`. It needs NATS connectivity and collector API-key configuration through environment variables.
 
-Use the pinned version tag for deployments. The `latest` tag is available for convenience.
+Use the pinned version tag for deployments. The 0.1.10 publication did not move
+the `latest` tag.
 
 ## Release notes
 
@@ -43,6 +47,31 @@ Use the pinned version tag for deployments. The `latest` tag is available for co
   values. `ingest.ip` is omitted when raw-IP storage is disabled or no valid
   request IP is available. Top-level `received_at` is always populated.
 - The VM quickstart pins the published 0.1.9 image.
+
+### 0.1.10 — published 2026-10-24
+
+Validation failures remain HTTP 422 with the existing `{"detail":[...]}`
+envelope and return only `type`, `loc`, and `msg`. Up to 20 errors are returned
+in order. Only when there are more than 20, the response contains the first 19
+errors followed by this fixed marker in slot 20:
+
+```json
+{"type":"errors_truncated","loc":[],"msg":"Additional validation errors omitted"}
+```
+
+This intentionally removes Pydantic's prior `input`, `ctx`, and `url` fields.
+Malformed JSON that previously could fail response serialization as HTTP 500
+now returns the sanitized 422 response. SDKs quarantine that response rather
+than retrying it as a server error.
+
+Stream startup checks for an existing compatible JetStream stream before adding
+one. A compatible stream confirmed after initial `NotFoundError` and a successful
+compatible add logs `stream_created` regardless of `did_create` (including when
+that attribute is absent); other compatible confirmations log
+`stream_exists_and_compatible`. This log describes an observed absent-to-present
+transition, not exclusive creation by a particular worker.
+
+The VM-one quickstart now pins published collector-api `0.1.10`.
 
 ## Related docs
 

@@ -128,12 +128,14 @@ For the test event and landing check, see
 Rawbbit public service images use GHCR:
 
 - `ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.8`
-- `ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.9` — published
+- `ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.9` — published for `linux/amd64` (`sha256:bbb96b074a42640c8472aaf601c8187f068590b60abc2afe699d9f77f0758941`)
+- `ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.10` — published 2026-10-24 for `linux/amd64`; OCI index `sha256:710e4bcd5347b15d0f1cac819bc5d26320a39026012264c4ba76a0ca98095fce`, platform manifest `sha256:48014fa043cc8235251d97e6702e0418d92e5f014a19ff724a271a5117faac7a` (index includes an attestation manifest)
 - `ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.11` — published
 - `ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2`
 - `ghcr.io/mirlan-irokez/rawbbit-dbt-runner:0.1.1`
 
-Existing published releases also have `latest` tags for convenience. Prefer published pinned version tags for deployments.
+Prefer published pinned version tags for deployments. The 0.1.10 publication did
+not move the `latest` tag.
 
 Raw-writer `0.1.11` is published and includes malformed-message isolation.
 
@@ -144,7 +146,27 @@ body-supplied `received_at`, `ingest.request_id`, `ingest.user_agent`,
 is removed when storage is disabled or no valid request IP is available), and
 top-level `received_at` is always populated.
 
-The VM-one quickstart pins collector-api `0.1.9` and raw-writer `0.1.11`. To
+Collector-api `0.1.10` was published to GHCR on 2026-10-24 for `linux/amd64`.
+Validation failures preserve the HTTP 422 `detail` envelope but now expose only
+`type`, `loc`, and `msg`. At most 20 entries are returned; when there are more
+than 20, the response keeps the first 19 and uses this fixed `errors_truncated`
+marker in slot 20:
+
+```json
+{"type":"errors_truncated","loc":[],"msg":"Additional validation errors omitted"}
+```
+
+The intentional body change removes Pydantic's `input`, `ctx`, and `url` fields.
+Malformed JSON now returns HTTP 422 instead of HTTP 500, so SDKs quarantine that
+response rather than retrying it as a server error. Stream startup logs
+`stream_created` after an initial genuine `NotFoundError` and successful
+compatible add, regardless of `did_create`; other compatible confirmations log
+`stream_exists_and_compatible`.
+
+The VM-one quickstart pin is updated to published collector-api `0.1.10` below.
+The 0.1.10 publication did not move the `latest` tag.
+
+The VM-one quickstart pins collector-api `0.1.10` and raw-writer `0.1.11`. To
 run local changes, build an image from the service folder (for example
 `docker build -t my-collector-api backend/collector-api`) and set that image in
 `quickstart/vm_rawbbit_one/docker-compose.yml`.

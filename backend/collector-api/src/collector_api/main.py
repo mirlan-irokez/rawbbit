@@ -34,8 +34,112 @@ def _redacted_url(url: str) -> str:
     port = f":{port_value}" if port_value else ""
     return f"{parts.scheme}://{host}{port}"
 
+
 app = FastAPI(title="collector-api", version="0.1.0")
 settings = get_settings()
+
+_MAX_VALIDATION_ERRORS = 20
+_VALIDATION_TRUNCATION_ERROR = {
+    "type": "errors_truncated",
+    "loc": [],
+    "msg": "Additional validation errors omitted",
+}
+_SAFE_VALIDATION_FIELDS = frozenset(
+    {
+        "events",
+        "event_id",
+        "app_id",
+        "environment",
+        "event_name",
+        "event_timestamp",
+        "received_at",
+        "user",
+        "device",
+        "traffic_source",
+        "geo",
+        "event_params",
+        "user_properties",
+        "consent",
+        "ingest",
+        "user_id",
+        "user_pseudo_id",
+        "session_id",
+        "platform",
+        "app_version",
+        "os_version",
+        "device_model",
+        "locale",
+        "timezone",
+        "source",
+        "medium",
+        "campaign",
+        "country",
+        "country_code",
+        "city",
+        "region",
+        "analytics_storage",
+        "ads_storage",
+        "personalization",
+        "user_agent",
+        "ip_hash",
+        "ip",
+        "request_id",
+    }
+)
+_SAFE_VALIDATION_MESSAGES = {
+    "json_invalid": "Invalid JSON",
+    "missing": "Field required",
+    "string_type": "Input should be a valid string",
+    "datetime_type": "Input should be a valid datetime",
+    "datetime_parsing": "Input should be a valid datetime",
+    "model_type": "Input should be a valid object",
+    "list_type": "Input should be a valid list",
+    "dict_type": "Input should be a valid dictionary",
+    "bool_type": "Input should be a valid boolean",
+    "int_type": "Input should be a valid integer",
+    "float_type": "Input should be a valid number",
+}
+
+
+def _sanitize_validation_errors(exc: ValidationError) -> list[dict[str, object]]:
+    errors = exc.errors(include_input=False, include_context=False, include_url=False)
+    sanitized: list[dict[str, object]] = []
+    for error in errors[:_MAX_VALIDATION_ERRORS]:
+        error_type = error.get("type")
+        safe_type = (
+            error_type
+            if isinstance(error_type, str)
+            and error_type
+            and all(
+                char.isascii() and (char.islower() or char.isdigit() or char == "_")
+                for char in error_type
+            )
+            else "validation_error"
+        )
+        raw_location = error.get("loc", ())
+        location = [
+            part
+            if type(part) is int and part >= 0
+            else part
+            if isinstance(part, str) and part in _SAFE_VALIDATION_FIELDS
+            else "<field>"
+            for part in raw_location
+        ]
+        sanitized.append(
+            {
+                "type": safe_type,
+                "loc": location,
+                "msg": _SAFE_VALIDATION_MESSAGES.get(safe_type, "Input is invalid"),
+            }
+        )
+
+    if len(errors) > _MAX_VALIDATION_ERRORS:
+        return [
+            *sanitized[: _MAX_VALIDATION_ERRORS - 1],
+            _VALIDATION_TRUNCATION_ERROR.copy(),
+        ]
+    return sanitized
+
 
 if settings.cors_origins_list:
     app.add_middleware(
@@ -56,10 +160,14 @@ publisher = NATSPublisher(
     duplicate_window_seconds=settings.nats_duplicate_window_seconds,
     max_inflight_publishes=settings.nats_max_inflight_publishes,
 )
-geoip_resolver = GeoIPCountryResolver(enabled=settings.geoip_enabled, mmdb_path=settings.geoip_mmdb_path)
+geoip_resolver = GeoIPCountryResolver(
+    enabled=settings.geoip_enabled, mmdb_path=settings.geoip_mmdb_path
+)
 
 
-def _enrich_event(event_payload: dict, request: Request, request_id: str, cfg: Settings) -> dict:
+def _enrich_event(
+    event_payload: dict, request: Request, request_id: str, cfg: Settings
+) -> dict:
     now = datetime.now(UTC).isoformat()
     client_ip = extract_client_ip(request)
     ingest = dict(event_payload.get("ingest") or {})
@@ -139,18 +247,32 @@ async def ingest_events(
     async for chunk in request.stream():
         body.extend(chunk)
         if len(body) > settings.max_request_bytes:
-            logger.warning("request_rejected reason=request_too_large request_bytes=%s", len(body))
-            raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Request too large")
+            logger.warning(
+                "request_rejected reason=request_too_large request_bytes=%s", len(body)
+            )
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Request too large",
+            )
 
     try:
         payload = EventBatchRequest.model_validate_json(body)
     except ValidationError as exc:
-        logger.warning("request_rejected reason=validation_error request_bytes=%s", len(body))
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.errors()) from exc
+        logger.warning(
+            "request_rejected reason=validation_error request_bytes=%s", len(body)
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_sanitize_validation_errors(exc),
+        ) from exc
 
     if not payload.events:
-        logger.warning("request_rejected reason=empty_events request_bytes=%s", len(body))
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="events cannot be empty")
+        logger.warning(
+            "request_rejected reason=empty_events request_bytes=%s", len(body)
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="events cannot be empty"
+        )
 
     if len(payload.events) > settings.max_events_per_request:
         logger.warning(
@@ -170,7 +292,9 @@ async def ingest_events(
             assert_api_key_allowed(settings.api_key_map, x_api_key, event.app_id)
     except HTTPException as exc:
         reason = _auth_error_reason(str(exc.detail))
-        logger.warning("request_rejected reason=%s events=%s", reason, len(payload.events))
+        logger.warning(
+            "request_rejected reason=%s events=%s", reason, len(payload.events)
+        )
         raise
 
     messages = [
@@ -209,4 +333,6 @@ async def ingest_events(
         publish_ms,
     )
 
-    return EventBatchResponse(request_id=request_id, accepted_events=len(payload.events))
+    return EventBatchResponse(
+        request_id=request_id, accepted_events=len(payload.events)
+    )

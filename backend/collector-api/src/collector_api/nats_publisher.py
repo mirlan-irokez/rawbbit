@@ -7,7 +7,8 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from nats.aio.client import Client as NATS
-from nats.js.api import StorageType, StreamConfig
+from nats.js.api import StorageType, StreamConfig, StreamInfo
+from nats.js.errors import NotFoundError
 
 logger = logging.getLogger("collector_api.nats")
 
@@ -75,21 +76,59 @@ class NATSPublisher:
             duplicate_window=self._duplicate_window_seconds,
         )
         try:
-            await self._js.add_stream(config=cfg)
-            logger.info("stream_created stream=%s", self._stream_name)
-        except Exception as exc:
             info = await self._js.stream_info(self._stream_name)
-            subjects = set(info.config.subjects or [])
-            expected_subject = f"{self._subject_prefix}.>"
-            if expected_subject not in subjects:
-                raise RuntimeError(
-                    f"JetStream stream '{self._stream_name}' exists with incompatible subjects {sorted(subjects)}; expected to include '{expected_subject}'"
-                ) from exc
-            if info.config.storage != StorageType.FILE:
-                raise RuntimeError(
-                    f"JetStream stream '{self._stream_name}' uses storage '{info.config.storage}', expected FILE"
-                ) from exc
-            logger.info("stream_exists_and_compatible stream=%s subjects=%s", self._stream_name, sorted(subjects))
+        except NotFoundError:
+            pass
+        else:
+            subjects = self._validate_stream_compatibility(info)
+            logger.info(
+                "stream_exists_and_compatible stream=%s subjects=%s",
+                self._stream_name,
+                subjects,
+            )
+            return
+
+        try:
+            created_info = await self._js.add_stream(config=cfg)
+        except Exception as add_error:  # noqa: BLE001 - verify a possible create race.
+            try:
+                info = await self._js.stream_info(self._stream_name)
+            except NotFoundError:
+                raise add_error
+            except Exception as info_error:
+                raise add_error from info_error
+
+            subjects = self._validate_stream_compatibility(info, cause=add_error)
+            logger.info(
+                "stream_exists_and_compatible stream=%s subjects=%s",
+                self._stream_name,
+                subjects,
+            )
+            return
+
+        self._validate_stream_compatibility(created_info)
+        logger.info("stream_created stream=%s", self._stream_name)
+
+    def _validate_stream_compatibility(
+        self, info: StreamInfo, *, cause: Exception | None = None
+    ) -> list[str]:
+        subjects = sorted(set(info.config.subjects or []))
+        expected_subject = f"{self._subject_prefix}.>"
+        if expected_subject not in subjects:
+            error = RuntimeError(
+                f"JetStream stream '{self._stream_name}' exists with incompatible subjects {subjects}; expected to include '{expected_subject}'"
+            )
+            if cause is not None:
+                raise error from cause
+            raise error
+        if info.config.storage != StorageType.FILE:
+            error = RuntimeError(
+                f"JetStream stream '{self._stream_name}' uses storage '{info.config.storage}', expected FILE"
+            )
+            if cause is not None:
+                raise error from cause
+            raise error
+        return subjects
 
     async def publish(self, subject: str, payload: dict[str, Any], msg_id: str) -> None:
         assert self._js is not None
@@ -98,7 +137,9 @@ class NATSPublisher:
         async with self._inflight:
             await self._js.publish(subject=subject, payload=data, headers=headers)
 
-    async def publish_batch(self, messages: list[tuple[str, dict[str, Any], str]]) -> None:
+    async def publish_batch(
+        self, messages: list[tuple[str, dict[str, Any], str]]
+    ) -> None:
         """Publish (subject, payload, msg_id) tuples concurrently and wait for every ACK.
 
         Order within the batch is not preserved. Every event is attempted; if any fails,
@@ -106,12 +147,19 @@ class NATSPublisher:
         deduplicates on Nats-Msg-Id within the duplicate window.
         """
         results = await asyncio.gather(
-            *(self.publish(subject=subject, payload=payload, msg_id=msg_id) for subject, payload, msg_id in messages),
+            *(
+                self.publish(subject=subject, payload=payload, msg_id=msg_id)
+                for subject, payload, msg_id in messages
+            ),
             return_exceptions=True,
         )
         errors = [result for result in results if isinstance(result, BaseException)]
         if errors:
-            raise BatchPublishError(published=len(results) - len(errors), failed=len(errors), first_error=errors[0])
+            raise BatchPublishError(
+                published=len(results) - len(errors),
+                failed=len(errors),
+                first_error=errors[0],
+            )
 
     async def close(self) -> None:
         if self._nc.is_connected:

@@ -41,8 +41,8 @@ services:
       - ./nats-server.conf:/etc/nats/nats-server.conf:ro
 
   collector-api:
-    # 0.1.9 adds Retry-After CORS exposure and authoritative ingest metadata;
-    image: ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.9
+    # 0.1.10: sanitized 422 detail and accurate stream startup log.
+    image: ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.10
     restart: unless-stopped
     logging: *default-logging
     env_file: *env-files

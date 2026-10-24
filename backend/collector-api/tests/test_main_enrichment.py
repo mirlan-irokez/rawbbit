@@ -81,6 +81,289 @@ def _request_body(events: list[dict[str, object]]) -> bytes:
     return json.dumps({"events": events}).encode("utf-8")
 
 
+async def _asgi_post(
+    body: bytes,
+    *,
+    headers: list[tuple[bytes, bytes]] | None = None,
+    chunk_size: int = 4096,
+) -> dict[str, object]:
+    chunks = [
+        body[index : index + chunk_size] for index in range(0, len(body), chunk_size)
+    ]
+    if not chunks:
+        chunks = [b""]
+    messages = [
+        {"type": "http.request", "body": chunk, "more_body": index < len(chunks) - 1}
+        for index, chunk in enumerate(chunks)
+    ]
+    response_status: int | None = None
+    response_headers: dict[str, str] = {}
+    response_body = bytearray()
+
+    async def receive() -> dict[str, object]:
+        if messages:
+            return messages.pop(0)
+        return {"type": "http.disconnect"}
+
+    async def send(message: dict[str, object]) -> None:
+        nonlocal response_status
+        if message["type"] == "http.response.start":
+            response_status = int(message["status"])
+            response_headers.update(
+                {
+                    key.decode("latin-1").lower(): value.decode("latin-1")
+                    for key, value in message.get("headers", [])  # type: ignore[union-attr]
+                }
+            )
+        elif message["type"] == "http.response.body":
+            response_body.extend(message.get("body", b""))  # type: ignore[arg-type]
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/v1/events:batch",
+        "raw_path": b"/v1/events:batch",
+        "query_string": b"",
+        "root_path": "",
+        "headers": headers or [(b"content-type", b"application/json")],
+        "client": ("127.0.0.1", 12345),
+        "server": ("testserver", 80),
+        "state": {},
+        "extensions": {},
+    }
+    caught: BaseException | None = None
+    try:
+        await main.app(scope, receive, send)
+    except TypeError as exc:  # ServerErrorMiddleware re-raises after sending 500.
+        caught = exc
+
+    return {
+        "status": response_status,
+        "headers": response_headers,
+        "body": bytes(response_body),
+        "exception": caught,
+    }
+
+
+def _required_event() -> dict[str, object]:
+    return {
+        "event_id": "evt-asgi",
+        "app_id": "com.example.game",
+        "event_name": "level_completed",
+        "event_timestamp": "2026-03-20T18:42:15.123Z",
+    }
+
+
+class ValidationResponseTests(unittest.IsolatedAsyncioTestCase):
+    async def test_malformed_json_variants_return_422_without_traceback_or_body_logging(
+        self,
+    ) -> None:
+        cases = [b"{", b"not json", b'{"events": [}', b"\xff", b'{"events":[']
+        for body in cases:
+            with self.subTest(body=body):
+                with self.assertLogs("collector_api", level="WARNING") as logs:
+                    response = await _asgi_post(body, chunk_size=2)
+
+                self.assertEqual(response["status"], 422)
+                self.assertIsNone(response["exception"])
+                payload = json.loads(response["body"])
+                self.assertIsInstance(payload["detail"], list)
+                for error in payload["detail"]:
+                    self.assertEqual(set(error), {"type", "loc", "msg"})
+                    self.assertEqual(error["msg"], "Invalid JSON")
+                log_output = "\n".join(logs.output)
+                self.assertNotIn("Traceback", log_output)
+                decoded_body = body.decode("utf-8", errors="ignore")
+                if decoded_body:
+                    self.assertNotIn(decoded_body, log_output)
+
+    async def test_schema_422_never_reflects_body_or_pydantic_private_fields(
+        self,
+    ) -> None:
+        sentinel = "private-validation-sentinel-7d38"
+        event = _required_event()
+        del event["event_id"]
+        event["user"] = {"user_id": sentinel}
+        body = _request_body([event])
+
+        publisher = _PublisherStub()
+        with (
+            self.assertLogs("collector_api", level="WARNING") as logs,
+            patch.object(main, "publisher", publisher),
+            patch("collector_api.main.assert_api_key_allowed") as auth,
+        ):
+            response = await _asgi_post(
+                body,
+                headers=[
+                    (b"content-type", b"application/json"),
+                    (b"x-api-key", b"not-used"),
+                ],
+            )
+
+        self.assertEqual(response["status"], 422)
+        self.assertIsNone(response["exception"])
+        response_text = response["body"].decode("utf-8")
+        self.assertNotIn(sentinel, response_text)
+        self.assertNotIn(sentinel, "\n".join(logs.output))
+        payload = json.loads(response_text)
+        self.assertEqual(set(payload), {"detail"})
+        self.assertEqual(set(payload["detail"][0]), {"type", "loc", "msg"})
+        self.assertEqual(payload["detail"][0]["type"], "missing")
+        self.assertNotIn('"input"', response_text)
+        self.assertNotIn('"ctx"', response_text)
+        self.assertNotIn('"url"', response_text)
+        auth.assert_not_called()
+        self.assertEqual(publisher.calls, 0)
+
+    async def test_invalid_type_and_timestamp_messages_do_not_reflect_values(
+        self,
+    ) -> None:
+        sentinel = "private-invalid-value-sentinel-945e"
+        invalid_event_type = _required_event()
+        invalid_event_type["app_id"] = {"user_value": sentinel}
+        invalid_timestamp = _required_event()
+        invalid_timestamp["event_timestamp"] = sentinel
+
+        for event in (invalid_event_type, invalid_timestamp):
+            response = await _asgi_post(_request_body([event]))
+            self.assertEqual(response["status"], 422)
+            self.assertIsNone(response["exception"])
+            response_text = response["body"].decode("utf-8")
+            self.assertNotIn(sentinel, response_text)
+            details = json.loads(response_text)["detail"]
+            self.assertTrue(
+                all(set(error) == {"type", "loc", "msg"} for error in details)
+            )
+
+    async def test_validation_error_count_is_bounded_with_fixed_truncation_marker(
+        self,
+    ) -> None:
+        for event_count, expected_count, truncated in (
+            (1, 4, False),
+            (5, 20, False),
+            (6, 20, True),
+        ):
+            with self.subTest(event_count=event_count):
+                events = [{} for _ in range(event_count)]
+                response = await _asgi_post(_request_body(events))
+                self.assertEqual(response["status"], 422)
+                self.assertIsNone(response["exception"])
+                details = json.loads(response["body"])["detail"]
+                self.assertEqual(len(details), expected_count)
+                self.assertTrue(
+                    all(set(error) == {"type", "loc", "msg"} for error in details)
+                )
+                if truncated:
+                    self.assertEqual(
+                        details[-1],
+                        {
+                            "type": "errors_truncated",
+                            "loc": [],
+                            "msg": "Additional validation errors omitted",
+                        },
+                    )
+                    self.assertTrue(
+                        all(error["type"] == "missing" for error in details[:-1])
+                    )
+                else:
+                    self.assertTrue(
+                        all(error["type"] == "missing" for error in details)
+                    )
+
+    async def test_validation_precedence_and_unrelated_statuses_are_unchanged(
+        self,
+    ) -> None:
+        with patch.object(main.settings, "max_request_bytes", 4):
+            oversized = await _asgi_post(b'{"events": [')
+        self.assertEqual(oversized["status"], 413)
+
+        boundary_body = b"{"
+        with patch.object(main.settings, "max_request_bytes", len(boundary_body)):
+            at_limit = await _asgi_post(boundary_body, chunk_size=1)
+        self.assertEqual(at_limit["status"], 422)
+        with patch.object(main.settings, "max_request_bytes", len(boundary_body) - 1):
+            over_limit = await _asgi_post(boundary_body, chunk_size=1)
+        self.assertEqual(over_limit["status"], 413)
+
+        with patch.object(main.settings, "max_request_bytes", 1_048_576):
+            empty = await _asgi_post(b'{"events":[]}')
+        self.assertEqual(empty["status"], 400)
+
+        with (
+            patch.object(main.settings, "max_request_bytes", 1_048_576),
+            patch.object(main.settings, "max_events_per_request", 1),
+        ):
+            too_many = await _asgi_post(
+                _request_body([_required_event(), _required_event()])
+            )
+        self.assertEqual(too_many["status"], 413)
+
+        with patch("collector_api.main.assert_api_key_allowed") as auth:
+            malformed = await _asgi_post(
+                b"{", headers=[(b"content-type", b"application/json")]
+            )
+        self.assertEqual(malformed["status"], 422)
+        auth.assert_not_called()
+
+    async def test_valid_request_auth_and_publish_failure_statuses_are_unchanged(
+        self,
+    ) -> None:
+        event = _required_event()
+        success_publisher = _PublisherStub()
+        with (
+            patch.object(
+                main.settings,
+                "collector_api_keys_json",
+                '{"valid-key":"com.example.game"}',
+            ),
+            patch.object(main, "publisher", success_publisher),
+            patch.object(main, "geoip_resolver", _ResolverStub(None)),
+        ):
+            success = await _asgi_post(
+                _request_body([event]),
+                headers=[
+                    (b"content-type", b"application/json"),
+                    (b"x-api-key", b"valid-key"),
+                ],
+            )
+        self.assertEqual(success["status"], 200)
+        self.assertEqual(json.loads(success["body"])["accepted_events"], 1)
+        self.assertEqual(success_publisher.calls, 1)
+
+        with patch.object(main.settings, "collector_api_keys_json", "{}"):
+            unauthorized = await _asgi_post(_request_body([event]))
+        self.assertEqual(unauthorized["status"], 401)
+
+        class _FailingPublisher:
+            async def publish_batch(self, messages):
+                from collector_api.nats_publisher import BatchPublishError
+
+                raise BatchPublishError(
+                    0, len(messages), RuntimeError("publish failed")
+                )
+
+        with (
+            patch.object(
+                main.settings,
+                "collector_api_keys_json",
+                '{"valid-key":"com.example.game"}',
+            ),
+            patch.object(main, "publisher", _FailingPublisher()),
+            patch.object(main, "geoip_resolver", _ResolverStub(None)),
+        ):
+            failed = await _asgi_post(
+                _request_body([event]),
+                headers=[
+                    (b"content-type", b"application/json"),
+                    (b"x-api-key", b"valid-key"),
+                ],
+            )
+        self.assertEqual(failed["status"], 503)
+
+
 class MainEnrichmentTests(unittest.TestCase):
     def _assert_fresh_equal_utc_timestamps(
         self,

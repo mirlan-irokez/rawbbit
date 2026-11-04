@@ -24,8 +24,10 @@ namespace Rawbbit.Unity.Tests
                 Environment = "test",
                 Platform = "unity_editor"
             }, root, transport);
+            Assert.That(host.IsReady || host.InstallationId == null, Is.True);
             yield return new WaitUntil(() => host.IsReady || host.InitializationFailed);
             Assert.That(host.IsReady, Is.True);
+            Assert.That(host.InstallationId, Is.Not.Null.And.EqualTo(host.Client.InstallationId));
             Assert.That(host.Client.HasCurrentConsent, Is.False);
             Assert.That(host.Client.TryBeginRequest(System.DateTimeOffset.UtcNow), Is.Null);
             Assert.That(transport.SendCount, Is.Zero);

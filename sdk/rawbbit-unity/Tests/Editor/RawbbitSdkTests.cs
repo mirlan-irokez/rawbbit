@@ -84,7 +84,7 @@ namespace Rawbbit.Unity.Tests
             };
             RawbbitPayload.ValidateInput(input);
             string json = RawbbitPayload.BuildEventJson(input, _configuration, "pseudo", Guid.NewGuid().ToString("D"), Guid.NewGuid().ToString("D"), _clock.UtcNow);
-            JObject value = JObject.Parse(json);
+            JObject value = ParseJson(json);
 
             Assert.That(value["event_id"], Is.Not.Null);
             Assert.That(value["app_id"].Value<string>(), Is.EqualTo("test.game"));
@@ -102,7 +102,7 @@ namespace Rawbbit.Unity.Tests
             input.EventParams["product"] = null;
             input.Device = new Dictionary<string, object> { ["platform"] = "spoofed-platform", ["app_version"] = "1.2.3" };
             string json = RawbbitPayload.BuildEventJson(input, _configuration, "pseudo", Guid.NewGuid().ToString("D"), Guid.NewGuid().ToString("D"), _clock.UtcNow);
-            JObject value = JObject.Parse(json);
+            JObject value = ParseJson(json);
 
             Assert.That(value["event_params"]["product"].Type, Is.EqualTo(Newtonsoft.Json.Linq.JTokenType.Null));
             Assert.That(value["device"]["platform"].Value<string>(), Is.EqualTo("android"));
@@ -190,7 +190,7 @@ namespace Rawbbit.Unity.Tests
             Assert.That((await first).Status, Is.EqualTo(RawbbitTrackStatus.DurablyStored));
             Assert.That((await second).Status, Is.EqualTo(RawbbitTrackStatus.DurablyStored));
 
-            JObject body = JObject.Parse(client.TryBeginRequest(_clock.UtcNow).Body);
+            JObject body = ParseJson(client.TryBeginRequest(_clock.UtcNow).Body);
             Assert.That(body["events"][0]["event_name"].Value<string>(), Is.EqualTo("first_ordered"));
             Assert.That(body["events"][0]["event_timestamp"].Value<string>(), Is.EqualTo(expectedFirstTimestamp));
             Assert.That(body["events"][1]["event_name"].Value<string>(), Is.EqualTo("second_ordered"));
@@ -306,7 +306,7 @@ namespace Rawbbit.Unity.Tests
             await client.TrackAsync(Event("neutral_action"));
             await client.TrackAsync(Event("second_action"));
             RawbbitPreparedBatch batch = client.TryBeginRequest(_clock.UtcNow);
-            JObject body = JObject.Parse(batch.Body);
+            JObject body = ParseJson(batch.Body);
             JArray events = (JArray)body["events"];
 
             Assert.That(events.Count, Is.EqualTo(3));
@@ -334,7 +334,7 @@ namespace Rawbbit.Unity.Tests
 
             RawbbitTrackResult tracked = await client.TrackAsync(Event("without_prefix"));
             RawbbitPreparedBatch batch = client.TryBeginRequest(_clock.UtcNow);
-            JObject body = JObject.Parse(batch.Body);
+            JObject body = ParseJson(batch.Body);
 
             Assert.That(tracked.Status, Is.EqualTo(RawbbitTrackStatus.DurablyStored));
             Assert.That(body["events"].Count(), Is.EqualTo(1));
@@ -593,9 +593,9 @@ namespace Rawbbit.Unity.Tests
 
             _configuration.AllowFreshStoreWithUnresolvedLegacyStores = true;
             _configuration.CollectorUrl = "https://replacement.example.test";
-            Assert.ThrowsAsync<InvalidDataException>(async () => { await Open(); });
+            await AssertThrowsExactlyAsync<InvalidDataException>(Open);
             _configuration.PreviousCollectorUrl = "https://wrong-source.example.test";
-            Assert.ThrowsAsync<InvalidDataException>(async () => { await Open(); });
+            await AssertThrowsExactlyAsync<InvalidDataException>(Open);
             _configuration.PreviousCollectorUrl = previousUrl;
             RawbbitClient migrated = await Open();
             Assert.That(migrated.HasCurrentConsent, Is.False);
@@ -745,7 +745,7 @@ namespace Rawbbit.Unity.Tests
             else _configuration.Environment = "other_environment";
 
             Assert.That(_configuration.AllowFreshStoreWithUnresolvedLegacyStores, Is.False);
-            Assert.ThrowsAsync<InvalidDataException>(async () => { await Open(); });
+            await AssertThrowsExactlyAsync<InvalidDataException>(Open);
             Assert.That(Directory.GetDirectories(Path.Combine(_root, "Rawbbit")), Is.EqualTo(new[] { legacyRoot }));
             Assert.That(Directory.GetFiles(legacyRoot, "*", SearchOption.AllDirectories), Is.EquivalentTo(files.Keys));
             foreach (var file in files) Assert.That(File.ReadAllBytes(file.Key), Is.EqualTo(file.Value), file.Key);
@@ -1371,6 +1371,33 @@ namespace Rawbbit.Unity.Tests
             using (var sha = SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant();
         }
 
+        // NUnit's Assert.ThrowsAsync blocks the calling thread until the delegate's task
+        // completes. In the Unity Editor the test runs on the main thread under
+        // UnitySynchronizationContext, so the awaited continuation inside the delegate is
+        // posted back to that blocked thread and the run deadlocks. Await instead.
+        private static async Task AssertThrowsExactlyAsync<TException>(Func<Task> action) where TException : Exception
+        {
+            try
+            {
+                await action();
+            }
+            catch (Exception exception)
+            {
+                Assert.That(exception, Is.TypeOf<TException>());
+                return;
+            }
+            Assert.Fail("Expected " + typeof(TException).Name + " but no exception was thrown.");
+        }
+
+        // Newtonsoft's default DateParseHandling turns ISO-8601 strings such as
+        // event_timestamp into DateTime tokens, and Value<string>() then formats them in
+        // the current culture. Read SDK JSON the way the Collector sees it: verbatim.
+        private static JObject ParseJson(string json)
+        {
+            using (var reader = new JsonTextReader(new StringReader(json)) { DateParseHandling = DateParseHandling.None })
+                return JObject.Load(reader);
+        }
+
         private Task<RawbbitClient> Open()
         {
             return RawbbitClient.OpenAsync(_configuration, _root, _clock);
@@ -1388,7 +1415,7 @@ namespace Rawbbit.Unity.Tests
 
         private static string ReadUserField(RawbbitPreparedBatch batch, string field)
         {
-            JObject body = JObject.Parse(batch.Body);
+            JObject body = ParseJson(batch.Body);
             return body["events"][0]["user"][field].Value<string>();
         }
 

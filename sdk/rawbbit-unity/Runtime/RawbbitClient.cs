@@ -39,7 +39,7 @@ namespace Rawbbit.Unity
         private DateTimeOffset _retryNotBeforeUtc;
         private DateTimeOffset _nextMaintenanceUtc;
         private int _maintenanceRunning;
-        private readonly Random _retryJitter = new Random();
+        private readonly System.Random _retryJitter = new System.Random();
 
         [ThreadStatic]
         private static RawbbitClient _clientInsideSessionFactory;

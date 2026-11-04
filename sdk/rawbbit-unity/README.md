@@ -4,7 +4,7 @@ Generic Unity client source for sending game-owned events to the Rawbbit Collect
 
 ## Status
 
-Initial source implementation. **Unity Editor compilation and Android/iOS player/device validation have not been run in this environment.** Unity 2022.3 LTS is the provisional API baseline; confirm the consuming project's `ProjectSettings/ProjectVersion.txt` and pass the integration gates before claiming a supported production build.
+Initial source implementation. **Android/iOS player/device validation has not been run in this environment.** Unity 2022.3 LTS is the provisional API baseline; confirm the consuming project's `ProjectSettings/ProjectVersion.txt` and pass the integration gates before claiming a supported production build.
 
 ## Install in a game
 
@@ -118,13 +118,15 @@ Withdrawal and data loss are surfaced through returned `RawbbitRecoveryResult` /
 
 ## Validation
 
-The source includes Editor unit tests and PlayMode lifecycle tests. In a disposable Unity project with the package installed:
+The source includes Editor unit tests and PlayMode lifecycle tests. In a disposable Unity project with `com.unity.nuget.newtonsoft-json` and `com.unity.test-framework` installed and `Runtime/` plus `Tests/` copied under `Assets/`:
 
 ```bash
-"$UNITY_EDITOR" -batchmode -runTests -projectPath "$UNITY_TEST_PROJECT" \
-  -testPlatform EditMode -testResults "$RESULT_DIR/editmode.xml"
-"$UNITY_EDITOR" -batchmode -runTests -projectPath "$UNITY_TEST_PROJECT" \
-  -testPlatform PlayMode -testResults "$RESULT_DIR/playmode.xml"
+"$UNITY_EDITOR" -batchmode -nographics -runTests -projectPath "$UNITY_TEST_PROJECT" \
+  -testPlatform EditMode -testResults "$RESULT_DIR/editmode.xml" -logFile "$RESULT_DIR/editmode.log"
+"$UNITY_EDITOR" -batchmode -nographics -runTests -projectPath "$UNITY_TEST_PROJECT" \
+  -testPlatform PlayMode -testResults "$RESULT_DIR/playmode.xml" -logFile "$RESULT_DIR/playmode.log"
 ```
 
-Then build/run on Android and iOS. Check offline enqueue, force-stop/restart with consent unknown, fresh consent and replay, eviction/expiry, quarantine/recovery, withdrawal races, scene transitions, IL2CPP and storage/frame costs. An iOS Xcode export is not an iOS device test. See `INTEGRATION.md` for the full matrix. No Unity executable was available when these source files were prepared, so no Unity test is claimed as passing.
+The test asmdefs reference `Newtonsoft.Json.dll` and `nunit.framework.dll` explicitly (`overrideReferences`). Async test code must await rather than block: a synchronous wait on the Editor main thread (for example NUnit's `Assert.ThrowsAsync`) deadlocks under `UnitySynchronizationContext`.
+
+Then build/run on Android and iOS. Check offline enqueue, force-stop/restart with consent unknown, fresh consent and replay, eviction/expiry, quarantine/recovery, withdrawal races, scene transitions, IL2CPP and storage/frame costs. An iOS Xcode export is not an iOS device test. See `INTEGRATION.md` for the full matrix.

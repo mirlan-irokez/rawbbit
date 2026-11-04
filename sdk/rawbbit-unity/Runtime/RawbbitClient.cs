@@ -100,6 +100,14 @@ namespace Rawbbit.Unity
 
         public bool HasCurrentConsent { get { return _consentGranted && !_withdrawalInProgress && !_disposed; } }
 
+        /// <summary>
+        /// The SDK's persistent, app-generated installation ID for this app ID/environment store.
+        /// Read-only: reading it never creates, rotates or persists an ID, and it is available
+        /// regardless of consent because it is local state. It is the event <c>user_pseudo_id</c>
+        /// unless an identity provider or the event supplies another pseudo ID.
+        /// </summary>
+        public string InstallationId { get { return _installationId; } }
+
         public Task<RawbbitRecoveryResult> ConfirmConsentAsync()
         {
             if (_disposed) return Task.FromResult(new RawbbitRecoveryResult { Succeeded = false, SafeDiagnosticCode = "client_disposed" });

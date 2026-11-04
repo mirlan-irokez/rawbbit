@@ -243,6 +243,34 @@ namespace Rawbbit.Unity.Tests
         }
 
         [Test]
+        public async Task InstallationIdIsReadOnlyConsentIndependentAndStableAcrossWithdrawalAndRestart()
+        {
+            RawbbitClient client = await Open();
+            string installationId = client.InstallationId;
+            Guid parsed;
+            Assert.That(Guid.TryParse(installationId, out parsed), Is.True);
+            Assert.That(client.HasCurrentConsent, Is.False);
+            Assert.That(client.InstallationId, Is.EqualTo(installationId));
+            RawbbitQueueDiagnostics beforeReads = client.GetDiagnostics();
+            for (int i = 0; i < 3; i++) Assert.That(client.InstallationId, Is.EqualTo(installationId));
+            Assert.That(client.GetDiagnostics().QueueGeneration, Is.EqualTo(beforeReads.QueueGeneration));
+
+            Assert.That((await client.ConfirmConsentAsync()).Succeeded, Is.True);
+            await client.TrackAsync(Event("installation_id_event"));
+            Assert.That(ReadUserField(client.TryBeginRequest(_clock.UtcNow), "user_pseudo_id"), Is.EqualTo(installationId));
+
+            Assert.That((await client.WithdrawConsentAsync()).Succeeded, Is.True);
+            Assert.That(client.InstallationId, Is.EqualTo(installationId));
+            await client.DisposeClient();
+            Assert.That(client.InstallationId, Is.EqualTo(installationId));
+
+            RawbbitClient restarted = await Open();
+            Assert.That(restarted.HasCurrentConsent, Is.False);
+            Assert.That(restarted.InstallationId, Is.EqualTo(installationId));
+            restarted.Dispose();
+        }
+
+        [Test]
         public async Task WithdrawalInvalidatesPreparedDispatchBeforeTransportStart()
         {
             RawbbitClient client = await Open();

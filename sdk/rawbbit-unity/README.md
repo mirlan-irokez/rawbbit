@@ -4,7 +4,7 @@ Generic Unity client source for sending game-owned events to the Rawbbit Collect
 
 ## Status
 
-Initial source implementation. **Android/iOS player/device validation has not been run in this environment.** Unity 2022.3 LTS is the provisional API baseline; confirm the consuming project's `ProjectSettings/ProjectVersion.txt` and pass the integration gates before claiming a supported production build.
+Initial source implementation. **Android/iOS player/device validation has not been run in this environment.** Editor compilation and the SDK's EditMode/PlayMode tests pass on Unity 6000.3.26f1 (see Validation). Unity 2022.3 LTS is the provisional API baseline; confirm the consuming project's `ProjectSettings/ProjectVersion.txt` and pass the integration gates before claiming a supported production build.
 
 ## Install in a game
 
@@ -43,6 +43,17 @@ RawbbitTrackResult result = await host.TrackAsync(new RawbbitEventInput {
 ```
 
 `RawbbitUnityHost` exposes `IsReady`, `InitializationFailed`, and `Client`; wait for `IsReady` before using `Client` or the forwarding methods. Use the game's async lifecycle/bootstrap pattern rather than blocking the Unity main thread.
+
+### Installation ID (read-only)
+
+`RawbbitClient.InstallationId` returns the SDK's persistent, app-generated installation ID (a UUID string) for the current `AppId`/`Environment` store. `RawbbitUnityHost.InstallationId` forwards it and returns `null` until the host `IsReady` (and when initialization failed). Reading it never creates, rotates or persists an ID, and it does not require consent: it only reads local state that the store already holds. The ID survives restarts and consent withdrawal (withdrawal purges events and session state, not installation identity).
+
+Use it, for example, to show the ID on a privacy/settings screen so a player can identify their rows in a data-access or deletion request. It equals the events' `user.user_pseudo_id` only when neither the event nor an `IRawbbitIdentityProvider` supplies another pseudo ID; if the game supplies its own pseudo ID, show that one instead.
+
+```csharp
+string id = host.InstallationId;   // null until host.IsReady
+if (id != null) privacyLabel.text = "Analytics ID: " + id;
+```
 
 `TrackAsync` snapshots caller data synchronously and persists the immutable envelope on a worker task. `DurablyStored` means the local queue commit completed; it does not mean the Collector or ClickHouse accepted it. Callers should observe storage/validation outcomes but must not wait for network delivery in a gameplay transition.
 
@@ -128,5 +139,7 @@ The source includes Editor unit tests and PlayMode lifecycle tests. In a disposa
 ```
 
 The test asmdefs reference `Newtonsoft.Json.dll` and `nunit.framework.dll` explicitly (`overrideReferences`). Async test code must await rather than block: a synchronous wait on the Editor main thread (for example NUnit's `Assert.ThrowsAsync`) deadlocks under `UnitySynchronizationContext`.
+
+Editor results (Unity 6000.3.26f1, Linux, Newtonsoft 3.2.2, Test Framework 1.6.0): EditMode 85/85 passed; PlayMode 1/1 passed. This is Editor-only evidence, not a device test.
 
 Then build/run on Android and iOS. Check offline enqueue, force-stop/restart with consent unknown, fresh consent and replay, eviction/expiry, quarantine/recovery, withdrawal races, scene transitions, IL2CPP and storage/frame costs. An iOS Xcode export is not an iOS device test. See `INTEGRATION.md` for the full matrix.

@@ -350,12 +350,12 @@ credentials come from Vault.
 ## Optional multi-dataset MCP on VM two
 
 An empty registry keeps the existing VM-two deployment unchanged. Dataset
-support is opt-in and requires a published, versioned MCP image newer than
-`0.0.2`; do not enable it with `0.0.2`, `latest`, or an unpublished tag. The
-Ansible role uses the VM-two Compose overlay only when datasets are configured.
-After a compatible release is published, set `rawbbit_two_mcp_image` in the
-private `main.yml` to that published version; leave the example pin unchanged
-until then.
+support is opt-in and requires MCP image `0.0.3` or newer; `0.0.4` is the
+tested release and the example pin. When datasets are enabled, the role rejects
+`0.0.2`, `latest`, and any other tag that is not a version newer than `0.0.2`.
+The Ansible role uses the VM-two Compose overlay only when datasets are
+configured. Set `rawbbit_two_mcp_image` in the private `main.yml` to a published
+version tag.
 `rawbbit_two_datasets` defaults to an empty list. Use the tracked
 `group_vars/all/main.yml.example` and `group_vars/all/vault.yml.example` for
 field names: the main example shows neutral `secret_ref: team_a`, and the Vault

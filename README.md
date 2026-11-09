@@ -132,6 +132,8 @@ Rawbbit public service images use GHCR:
 - `ghcr.io/mirlan-irokez/rawbbit-collector-api:0.1.10` — published 2026-10-24 for `linux/amd64`; OCI index `sha256:710e4bcd5347b15d0f1cac819bc5d26320a39026012264c4ba76a0ca98095fce`, platform manifest `sha256:48014fa043cc8235251d97e6702e0418d92e5f014a19ff724a271a5117faac7a` (index includes an attestation manifest)
 - `ghcr.io/mirlan-irokez/rawbbit-raw-writer:0.1.11` — published
 - `ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2`
+- `ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.3` — adds optional dataset endpoints
+- `ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.4` — published 2026-11-09 for `linux/amd64`; fixes `discover_json_keys` on Nullable JSON columns; `latest` points here
 - `ghcr.io/mirlan-irokez/rawbbit-dbt-runner:0.1.1`
 
 Prefer published pinned version tags for deployments. The 0.1.10 publication did

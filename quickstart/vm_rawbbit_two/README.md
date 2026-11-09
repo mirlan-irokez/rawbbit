@@ -981,11 +981,11 @@ Do not publish MCP publicly with `MCP_ALLOW_UNAUTHENTICATED=1`.
 ## Optional multi-dataset MCP
 
 The default stack remains unchanged with no dataset registry. Multi-dataset
-support is opt-in through `docker-compose.datasets.yml` and requires a
-published, versioned MCP image newer than `0.0.2`; do not use `0.0.2`, `latest`,
-or an unpublished tag for this feature. Keep the existing image until a
-compatible release is published. Caddy already forwards the MCP hostname, so
-dataset paths do not need separate proxy rules.
+support is opt-in through `docker-compose.datasets.yml` and requires MCP image
+`0.0.3` or newer; `0.0.4` is the tested release. Pin it with `MCP_SERVER_IMAGE`;
+do not rely on the `latest` Compose default or an unpublished tag for this
+feature. Caddy already forwards the MCP hostname, so dataset paths do not need
+separate proxy rules.
 
 Use separate protected version-1 files: `datasets-runtime.json` for MCP and
 `datasets-provision.json` for the VM-two host provisioner. The runtime file has

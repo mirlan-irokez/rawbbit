@@ -84,15 +84,15 @@ The tools are intentionally raw-table oriented. They are useful for exploration 
 
 ## Published image
 
-The MCP server is published as a public GHCR image:
+The MCP server is published as a public GHCR image. The current release is:
 
 ```text
-ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2
+ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.4
 ```
 
-The image also has a `latest` tag for convenience. Use the pinned version tag for deployments.
-
-The included `docker-compose.yml` points at the pinned GHCR image by default.
+`latest` points at the current release, and the included `docker-compose.yml`
+uses `latest` when `MCP_SERVER_IMAGE` is unset. For repeatable deployments, set
+`MCP_SERVER_IMAGE` to a version tag; `.env.example` pins `0.0.4`.
 
 ## 1. Prepare Environment
 
@@ -255,10 +255,10 @@ Do not expose MCP publicly without an authentication layer. Static bearer tokens
 <!-- dataset-mcp:start -->
 ## Optional multi-dataset runtime
 
-This optional runtime requires a published, versioned MCP image newer than
-`0.0.2`. Do not enable the overlay against `0.0.2`, `latest`, or an unpublished
-tag. Keep the existing image reference until a compatible release is available;
-this guide does not preselect an unreleased version.
+This optional runtime requires MCP image `0.0.3` or newer; `0.0.4` is the
+tested release. Set `MCP_SERVER_IMAGE` to that version tag before enabling the
+overlay. Do not rely on `latest` (the Compose default) or an unpublished tag for
+dataset endpoints.
 
 The default Compose deployment remains unchanged when no registry is configured.
 For multiple datasets, use the opt-in `docker-compose.datasets.yml` overlay and

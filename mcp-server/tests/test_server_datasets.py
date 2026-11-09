@@ -221,6 +221,28 @@ def test_main_rejects_non_exposed_dataset_without_query_fallback() -> None:
     assert not RecordingGateway.calls
 
 
+def test_discover_json_keys_coerces_nullable_json_column_to_non_nullable_string() -> None:
+    # Ingested JSON columns are Nullable(String). ClickHouse rejects
+    # JSONExtractKeys on a Nullable argument ("Nested type Array(String)
+    # cannot be inside Nullable type"), so every branch must be non-nullable.
+    RecordingGateway.calls.clear()
+    _, app = create_app(settings(), registry(), gateway_factory=RecordingGateway)
+    with TestClient(app) as client:
+        auth_headers, _ = initialize(client, "/datasets/team_a/mcp", "team-a-token")
+        result = call_tool(
+            client,
+            "/datasets/team_a/mcp",
+            auth_headers,
+            "discover_json_keys",
+            {"json_column": "event_params_json"},
+        )
+
+    assert result["result"].get("isError") is not True
+    sql = " ".join(RecordingGateway.calls[-1][1].split())
+    assert "JSONExtractKeys(ifNull(nullIf(event_params_json, ''), '{}'))" in sql
+    assert "'{}', event_params_json)" not in sql
+
+
 def test_tool_audit_logs_safe_metadata_without_arguments_or_credentials(caplog) -> None:
     caplog.set_level("INFO", logger="rawbbit_mcp")
     RecordingGateway.calls.clear()

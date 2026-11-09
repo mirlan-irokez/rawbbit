@@ -158,7 +158,7 @@ def register_tools(
           count() AS rows_with_key
         FROM
         (
-          SELECT arrayJoin(JSONExtractKeys(if(empty(ifNull({json_column}, '')), '{{}}', {json_column}))) AS key
+          SELECT arrayJoin(JSONExtractKeys(ifNull(nullIf({json_column}, ''), '{{}}'))) AS key
           FROM {cfg.table_ref}
           WHERE event_time IS NOT NULL
           {optional_filters_sql(app_id=app_id, environment=environment, event_name=event_name)}

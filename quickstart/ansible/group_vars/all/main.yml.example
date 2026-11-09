@@ -31,7 +31,7 @@ rawbbit_one_nats_max_ack_pending: 10000
 rawbbit_two_mcp_hostname: mcp.example.com
 # Keep the current published image until the dataset-capable MCP release exists.
 rawbbit_two_mcp_path: /mcp
-rawbbit_two_mcp_image: ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.3
+rawbbit_two_mcp_image: ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.4
 # Optional dataset registry. Each secret_ref selects a matching entry in
 # vault_rawbbit_two_dataset_credentials. Dataset support requires a newer
 # published MCP image; Ansible rejects this still-current 0.0.2 pin.

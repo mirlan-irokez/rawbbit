@@ -113,7 +113,7 @@ services:
     stop_grace_period: 30s
 
   mcp-server:
-    image: ${MCP_SERVER_IMAGE:-ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.2}
+    image: ${MCP_SERVER_IMAGE:-ghcr.io/mirlan-irokez/rawbbit-mcp-server:latest}
     restart: unless-stopped
     logging: *default-logging
     environment:

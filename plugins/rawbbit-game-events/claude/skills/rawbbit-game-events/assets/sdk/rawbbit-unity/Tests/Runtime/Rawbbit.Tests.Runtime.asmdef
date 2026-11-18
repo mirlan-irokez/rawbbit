@@ -2,16 +2,20 @@
   "name": "Rawbbit.Unity.Tests.Runtime",
   "rootNamespace": "Rawbbit.Unity.Tests",
   "references": [
-    "Rawbbit.Unity"
+    "Rawbbit.Unity",
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
-  "overrideReferences": false,
-  "precompiledReferences": [],
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll",
+    "Newtonsoft.Json.dll"
+  ],
   "autoReferenced": false,
   "defineConstraints": ["UNITY_INCLUDE_TESTS"],
   "versionDefines": [],
-  "optionalUnityReferences": ["TestAssemblies"],
   "noEngineReferences": false
 }

@@ -23,6 +23,19 @@ namespace Rawbbit.Unity
         public bool IsReady { get { return Client != null; } }
         public bool InitializationFailed { get; private set; }
 
+        /// <summary>
+        /// The client's read-only installation ID, or <c>null</c> before the host is ready
+        /// (or if initialization failed). Never creates or rotates an ID; consent-independent.
+        /// </summary>
+        public string InstallationId
+        {
+            get
+            {
+                RawbbitClient client = Client;
+                return client == null ? null : client.InstallationId;
+            }
+        }
+
         public static RawbbitUnityHost Create(
             RawbbitConfiguration configuration,
             IRawbbitIdentityProvider identityProvider = null,

@@ -55,7 +55,7 @@ Read the current source-default count and byte limits from [generated Collector 
 - A simple game may deliberately use a player-entered value only after explicit human approval. Document that it may be non-unique, mutable, shared, personal, or abusive free text; prefer an application-generated pseudonymous identifier when stable person-level identity is not required.
 - Document login, logout, account switching, and anonymous-to-known transitions. Changing identity behavior on an existing event requires separate permission.
 - Do not put identifiers redundantly into `event_params`.
-- An SDK session ID does not itself imply a session-start event. The bundled Unity and browser adapters can prepend an optional game-owned `session_started` event through a configured session-start factory; without that factory, the SDK emits no such prefix. Propose it only when the game needs and approves that event, and document its trigger, consent gate, fields, and effect on the approved event set.
+- An SDK session ID does not itself imply a session-start event. The Unity and browser adapters can prepend an optional game-owned `session_started` event through a configured session-start factory; without that factory, the SDK emits no such prefix. Propose it only when the game needs and approves that event, and document its trigger, consent gate, fields, and effect on the approved event set.
 - Some existing analytics catalogs call this event `session_start`. Keep the game's approved name or explicitly map it to `session_started`; do not emit both names merely because the catalogs differ.
 
 ## Privacy and consent

@@ -1,9 +1,9 @@
 # Collector schema and field ownership
 
 The [generated Collector contract facts](collector-contract.json) contain the current endpoint, auth-header name, source-default limits, and accepted model fields with annotation types and required/optional status.
-They are generated from the maintained Collector contract. The packaged [bundle manifest](../assets/sdk/BUNDLE-MANIFEST.json) records their hash so an installed plugin can detect accidental changes.
+They are generated from the maintained Collector contract. [SDK source inventory](sdk-source.json) records their hash so an installed plugin can detect accidental changes.
 This document defines **field-ownership policy**, which schema acceptance alone cannot express.
-The installed plugin is self-contained: use these references and bundled SDKs, not a private repository path.
+Use these references and, after approval, the verified pinned public SDK download described in the skill; do not use a private repository path.
 
 ## Transport and limits
 

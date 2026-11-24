@@ -1,14 +1,14 @@
 # Engine and SDK selection
 
-Use `../assets/sdk/BUNDLE-MANIFEST.json` for bundled versions and file hashes; it does not identify a remote source checkout.
-Read the relevant bundled SDK `README.md` and `INTEGRATION.md` before implementation; these documents, not this summary, define API names, queue/recovery semantics, and installation details.
-The plugin does not need access to another repository or a published Rawbbit npm package.
+Use `sdk-source.json` for the pinned public repository, commit, SDK versions, and file hashes.
+After approval and successful verification, read the selected downloaded SDK `README.md` and `INTEGRATION.md`; those documents define API names, queue/recovery semantics, and installation details.
+The download requires access to the pinned public repository; no published Rawbbit npm package is required.
 
 ## Support finding
 
 Report three distinct claims:
 (1) an event-map proposal can be made from game evidence;
-(2) a bundled SDK is an integration candidate;
+(2) a pinned SDK is an integration candidate;
 (3) that exact editor/browser/backend/device target passed its required gates.
 Never infer (3) from (1) or (2).
 
@@ -18,7 +18,7 @@ Never infer (3) from (1) or (2).
 
 ## Four installed-SDK cases
 
-1. **No SDK:** install the complete relevant snapshot from `../assets/sdk/`; keep its `LICENSE` and record its public manifest version and hashes. Follow its bundled integration guide and adapt, rather than treating, its example as production-ready game logic.
+1. **No SDK:** after approval, fetch and verify the relevant SDK and root `LICENSE` as directed in the skill. Keep its license and record its pinned version and hashes. Follow its verified integration guide and adapt, rather than treating, its example as production-ready game logic.
 2. **Compatible SDK already installed:** reuse it. Map its version/copy revision and adapter ownership; add approved game events without copying a new SDK, duplicating a host, or changing its queue/identity.
 3. **Upgrade requested or required:** compare current and target APIs, adapter template, Collector envelope, consent/withdrawal, persisted queue/storage, identity/session, endpoint binding, and effective rollback. Require a game-specific migration and platform tests. Unity's newer stable store layout cannot be safely downgraded to a URL-keyed build by copying old files back. Browser template copies do not upgrade with SDK source.
 4. **Locally modified copy:** diff against known provenance and identify the fork owner. Do not overwrite or silently replace it. Propose a merge/compatibility path for approval.

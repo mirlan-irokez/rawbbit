@@ -10,7 +10,7 @@ description: Design, document, implement, migrate, or maintain Rawbbit event tra
 In Claude Code or Cowork, inspect and change a game only when its local checkout is available. In Claude chat or any context without project files, provide an event-map proposal or capability gap report only; say explicitly that no files were inspected or changed and do not claim integration or target verification.
 
 Make the game's event map the reviewable contract.
-The plugin contains complete Unity and browser-game SDK source snapshots under `assets/sdk/`; it must work without access to the Rawbbit repository.
+The plugin contains a pinned SDK source inventory, not SDK code. A new SDK copy requires the approved, verified download below.
 Do not treat a sample game or SDK template as the target game's event catalog.
 Do not send to a deployed Collector unless the human explicitly authorizes live traffic.
 
@@ -28,12 +28,26 @@ Do not send to a deployed Collector unless the human explicitly authorizes live 
 
 ## Implement and verify
 
-7. Integrate through a game-owned adapter using the compatible installed SDK or the appropriate bundled snapshot. The SDK/runtime stays generic; game code owns committed business transitions. For dual-write, fan out application-owned inputs to independent adapters. Neither adapter may require the other's success or import its generated identity, session, consent cache, autocapture payload, or storage. Preserve existing emissions unless replacement is approved. Do not block gameplay on telemetry delivery. Record SDK and copied adapter provenance in the event map.
+7. Integrate through a game-owned adapter using the compatible installed SDK or the approved, verified SDK download below. The SDK/runtime stays generic; game code owns committed business transitions. For dual-write, fan out application-owned inputs to independent adapters. Neither adapter may require the other's success or import its generated identity, session, consent cache, autocapture payload, or storage. Preserve existing emissions unless replacement is approved. Do not block gameplay on telemetry delivery. Record SDK and copied adapter provenance in the event map.
 8. Follow [verification](references/verification.md). Mock the Collector by default. Assert the approved event set per destination and documented session prefix, rerun idempotency, field ownership separately from Collector schema acceptance, consent withdrawal/restart, identity, offline/fault behavior, adapter failure isolation, and target-project checks. Distinguish extra gameplay triggers from at-least-once delivery retries retaining event IDs. Report skipped Editor/device/browser gates rather than treating a mock as platform certification.
 9. Handoff the event-map/code diff, approved/deferred items, SDK path/provenance, verification evidence, config locations without key values, deployment gaps, and any remaining migration risk.
 
-## Bundled references
+## Approved SDK download and verification
 
-- Unity: `assets/sdk/rawbbit-unity/README.md`, `INTEGRATION.md`, and `Examples/GameAnalyticsTemplate/`.
-- Browser JS: `assets/sdk/rawbbit-browser-game/README.md`, `INTEGRATION.md`, and `examples/GameAnalyticsAdapter.js.template`.
-- `assets/sdk/BUNDLE-MANIFEST.json` records packaged SDK versions and integrity hashes. Each SDK directory carries its own `LICENSE`.
+Only after the human approves the integration and selected SDK, explain that you will download the complete selected SDK directory and root `LICENSE` from https://github.com/mirlan-irokez/rawbbit at the full commit in `references/sdk-source.json`. Use only that repository and commit—never a branch, tag, latest, registry, or another repository.
+
+Create a fresh temporary directory outside the game. If Git is installed, run:
+
+```sh
+git init <tmp>
+git -C <tmp> -c core.autocrlf=false -c credential.helper= fetch --depth 1 https://github.com/mirlan-irokez/rawbbit.git <full-sha>
+git -C <tmp> -c core.autocrlf=false checkout FETCH_HEAD -- sdk/<name> LICENSE
+```
+
+Use archive fallback only when Git is unavailable: download https://github.com/mirlan-irokez/rawbbit/archive/<full-sha>.tar.gz and safely extract only `sdk/<name>/` and root `LICENSE` to the temporary directory. Reject absolute or traversal paths, symlinks, hard links, and nonregular files. If Git fetch, network, download, extraction, or any later check fails, stop—do not fall back from a Git failure, do not copy anything into the game, report the failure, and clean up the temporary directory. Never extract into the game.
+
+Read `references/sdk-source.json`. Compare the exact case-sensitive relative paths under `sdk/<name>/` with that SDK's complete `files` keys: every listed regular file must exist, and no unlisted file may exist. Hash raw bytes with `shasum -a 256`, `sha256sum`, or PowerShell `Get-FileHash -Algorithm SHA256`; compare every SHA-256 and the root `LICENSE` hash case-insensitively as hex. Do not normalize line endings. Any path, missing-file, unexpected-file, or hash error stops the process before copying.
+
+After all checks succeed, read the selected verified `README.md` and `INTEGRATION.md`. Follow the verified `INTEGRATION.md` for what to copy and where (for Unity it copies `Runtime/` to `Assets/Rawbbit/`; for browser it copies the complete SDK directory including `vendor/`). Preserve the verified Apache-2.0 `LICENSE` and attribution. Do not overwrite an installed or modified SDK without the separately approved migration path. Record the repository, commit, selected SDK version, and hashes in the event map. Clean up the temporary directory after copying.
+
+`references/sdk-source.json` also records the hash of `references/collector-contract.json`. The inventory detects mismatches but does not authenticate the publisher.

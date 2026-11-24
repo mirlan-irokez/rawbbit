@@ -1,17 +1,17 @@
 # Rawbbit.one Game Event Tracker for Claude
 
-![Rawbbit icon](assets/rawbbit-icon.svg)
+![Rawbbit icon](assets/rawbbit-icon.png)
 
 Design event maps, implement approved game analytics tracking, and maintain or migrate instrumentation in Unity and browser games.
 
-This skills-only Claude plugin helps you design, integrate, migrate, and maintain game-specific event tracking for [Rawbbit](https://rawbbit.one/), a self-hosted game analytics pipeline. It works on Unity and browser-JavaScript games and includes complete Unity and browser-game SDK source snapshots, integration guides, adapter templates, licenses, and Collector contract facts. It needs no MCP server, account, or access to another repository.
+This skills-only Claude plugin helps you design, integrate, migrate, and maintain game-specific event tracking for [Rawbbit](https://rawbbit.one/), a self-hosted game analytics pipeline. It works on Unity and browser-JavaScript games and includes the skill, integration guidance, Collector contract facts, and a pinned source inventory—not SDK code. After you approve the integration and SDK choice, the skill can fetch the selected complete SDK directory and root license from the [public Rawbbit repository](https://github.com/mirlan-irokez/rawbbit) at the exact commit recorded in the bundled source inventory, then verify the complete raw-byte inventory before copying.
 
 ## What it does
 
 - Inspects your game's code and confirms its engine and target platform with you.
 - Inventories existing Rawbbit and other-analytics events before proposing changes.
 - Writes a reviewable event map (by default `docs/analytics/rawbbit-event-map.md`) with triggers, fields, consent, and identity decisions.
-- After you approve specific events, integrates them through a game-owned adapter using the bundled SDK, including dual-write alongside another analytics tool.
+- After you approve specific events and the SDK choice, integrates them through a game-owned adapter using the verified pinned SDK, including dual-write alongside another analytics tool.
 - Verifies the integration against a mocked Collector and reports which target-platform checks were not run.
 
 ## Install
@@ -22,8 +22,9 @@ In Claude Code or Cowork, the skill works on a local game checkout. In Claude ch
 
 ## What it runs and sends
 
-- **The plugin itself sends nothing.** Installing it makes no network requests and starts no services.
-- **In your game project**, the skill may copy one bundled SDK into the game, edit game code you approved, and run the game's own build and test commands. For the browser SDK that includes `npm ci` and `npm run build` inside the copied SDK folder, which download public npm packages listed in its lockfile. For Unity it uses the game's Unity Editor and build tooling.
+- **The plugin itself sends nothing.** Enabling it makes no network requests and starts no services.
+- **SDK download (only after your approval):** the skill downloads the selected SDK folder and the root `LICENSE` from the public GitHub repository at the pinned commit. The download is anonymous: it uses no credentials and sends no game data or ingest key. GitHub receives ordinary request metadata.
+- **In your game project**, the skill may copy the verified SDK into the game, edit game code you approved, and run the game's own build and test commands. A browser SDK build may fetch the public npm dependencies listed in its lockfile after the verified SDK copy; Unity uses the game's Unity Editor and build tooling.
 - **The integrated SDK** sends gameplay events only to the Rawbbit Collector URL that you configure in your game, and only after the game's consent gate allows it. The skill tests against a mocked Collector and does not send live traffic unless you explicitly authorize it.
 - **Credentials:** the skill asks where your game stores its app-scoped ingest key, never for the key value, and commits only placeholders.
 
@@ -31,10 +32,10 @@ In Claude Code or Cowork, the skill works on a local game checkout. In Claude ch
 
 The full [Rawbbit Privacy Policy](https://rawbbit.one/privacy-policy) applies. In short:
 
-- **No data collection.** The plugin collects, stores, and transmits no personal or usage data. Rawbbit, the publisher, receives nothing from installing or using it.
+- **No telemetry collection by the plugin.** The plugin collects, stores, and transmits no personal or usage data. Enabling the installed plugin makes no SDK-fetch or telemetry request. An approved SDK download contacts GitHub anonymously and sends no game data or ingest key.
 - **Local project only.** The skill reads and edits files only in the game checkout you open. Event maps, code changes, and test output stay in that project.
 - **Credentials.** The skill never asks for, stores, or commits an ingest key's value; it asks only where your game's configuration keeps it.
-- **Your game's telemetry.** If you integrate the bundled SDK, your game sends gameplay events to the Rawbbit Collector that you configure and operate, only after your game's consent gate allows it. Rawbbit does not host or receive that data. Your own privacy policy and player-consent flow govern it.
+- **Your game's telemetry.** If you integrate an SDK, your game sends gameplay events to the Rawbbit Collector that you configure and operate, only after your game's consent gate allows it. Rawbbit does not host or receive that data. Your own privacy policy and player-consent flow govern it.
 
 ## Support
 
@@ -45,10 +46,9 @@ See also the [Privacy Policy](https://rawbbit.one/privacy-policy) and [Terms of 
 ## Contents
 
 - [Skill workflow](skills/rawbbit-game-events/SKILL.md)
-- [Unity SDK](skills/rawbbit-game-events/assets/sdk/rawbbit-unity/README.md) and [browser-game SDK](skills/rawbbit-game-events/assets/sdk/rawbbit-browser-game/README.md): copy the appropriate SDK into the game; do not build or install dependencies inside the plugin copy, which would invalidate its file inventory. These copies contain the SDK runtime, build files, and integration guides; the SDKs' own unit and browser test suites are not bundled, so the copied SDK's `npm test` scripts are not usable. The game's own build and tests, plus the mocked-Collector check, verify the integration.
-- [Bundle manifest](skills/rawbbit-game-events/assets/sdk/BUNDLE-MANIFEST.json): SDK versions and file hashes. Run `python3 scripts/verify_bundle.py` from the plugin folder to check them; hashes detect changes but do not authenticate a publisher.
+- [Pinned SDK source inventory](skills/rawbbit-game-events/references/sdk-source.json): public repository, commit, SDK versions, complete file hashes, root license hash, and Collector contract hash. The inventory detects mismatches but does not authenticate the publisher.
 - [Collector contract facts](skills/rawbbit-game-events/references/collector-contract.json) and [field ownership guidance](skills/rawbbit-game-events/references/schema-and-field-ownership.md).
-- [License](LICENSE): Apache-2.0. Each copyable SDK snapshot includes its own license text.
+- [License](LICENSE): Apache-2.0. The selected SDK download includes the verified public repository root license and attribution.
 
 ## Limits
 

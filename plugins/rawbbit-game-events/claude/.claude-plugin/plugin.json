@@ -2,7 +2,7 @@
   "name": "rawbbit-game-events",
   "displayName": "Rawbbit.one Game Event Tracker",
   "description": "Design event maps, implement approved game analytics tracking, and maintain or migrate instrumentation in Unity and browser games.",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "author": {
     "name": "Rawbbit",
     "url": "https://rawbbit.one/"

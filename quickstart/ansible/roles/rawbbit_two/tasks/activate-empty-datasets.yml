@@ -32,6 +32,8 @@
     files:
       - docker-compose.yml
       - docker-compose.dozzle.yml
+    env_files:
+      - '{{ rawbbit_two_stage.path }}/.env'
     services:
       - mcp-server
     dependencies: false
@@ -56,6 +58,8 @@
     files:
       - docker-compose.yml
       - docker-compose.dozzle.yml
+    env_files:
+      - '{{ rawbbit_two_stage.path }}/.env'
     services:
       - postgres
       - metabase

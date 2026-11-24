@@ -1,0 +1,32 @@
+name: beszel-hub
+
+services:
+  beszel:
+    image: henrygd/beszel:0.21.2
+    restart: unless-stopped
+    environment:
+      APP_URL: ${BESZEL_APP_URL:?Set BESZEL_APP_URL in .env}
+      DISABLE_SSH: "true"
+    volumes:
+      - ./beszel_data:/beszel_data
+    networks:
+      - beszel-private
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      BESZEL_DOMAIN: ${BESZEL_DOMAIN:?Set BESZEL_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/data:/data
+      - ./caddy/config:/config
+    networks:
+      - beszel-private
+
+networks:
+  beszel-private:
+    driver: bridge

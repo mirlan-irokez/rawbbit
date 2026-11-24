@@ -1,0 +1,37 @@
+name: {{ beszel_agent_project_name }}
+
+services:
+  beszel-agent:
+    image: {{ beszel_agent_image }}
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - {{ (beszel_agent_root ~ '/agent.env') | to_json }}
+    environment:
+      HUB_URL: {{ (rawbbit_beszel_hub_url | string | replace('$', '$$')) | to_json }}
+      SYSTEM_NAME: {{ (beszel_agent_system_name | string | replace('$', '$$')) | to_json }}
+      DISABLE_SSH: 'true'
+{% if beszel_agent_smart_devices | length == 0 %}
+      SMART_DEVICES: ''
+{% else %}
+{% set smart_device_paths = [] %}
+{% for device in beszel_agent_smart_devices %}
+{% set _ = smart_device_paths.append(device.split(':')[-1]) %}
+{% endfor %}
+      SMART_DEVICES: {{ smart_device_paths | join(',') | to_json }}
+    devices:
+{% for device in beszel_agent_smart_devices %}
+      - {{ (device if ':' in device else device ~ ':' ~ device) | to_json }}
+{% endfor %}
+    cap_add:
+      - SYS_RAWIO
+      - SYS_ADMIN
+{% endif %}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - {{ (beszel_agent_root ~ '/data:/var/lib/beszel-agent') | to_json }}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

@@ -1,0 +1,144 @@
+---
+- name: Configure Beszel agent when enabled
+  when: beszel_agent_enabled | bool
+  block:
+    - name: Validate Beszel hub, registration secrets, and system name
+      ansible.builtin.assert:
+        that:
+          - (vault_rawbbit_beszel_token | default('')) is string
+          - (vault_rawbbit_beszel_token | default('') | string | trim | length) > 0
+          - "'\n' not in (vault_rawbbit_beszel_token | default('') | string)"
+          - "'\r' not in (vault_rawbbit_beszel_token | default('') | string)"
+          - >-
+            (vault_rawbbit_beszel_token | default('') | string
+            | regex_search('[\x00-\x1f\x7f-\x9f]')) is none
+          - >-
+            (vault_rawbbit_beszel_token | default('') | string | trim | lower
+            | regex_search('^(change_me|replace_me|replace_with|placeholder|your[_ -])'))
+            is none
+          - rawbbit_beszel_hub_url is string
+          - (rawbbit_beszel_hub_url | string | trim | length) > 0
+          - "'\n' not in (rawbbit_beszel_hub_url | string)"
+          - "'\r' not in (rawbbit_beszel_hub_url | string)"
+          - (rawbbit_beszel_hub_url | string | regex_search('[\x00-\x1f\x7f-\x9f]')) is none
+          - >-
+            (rawbbit_beszel_hub_url | string) is match(
+            '^https://(?:(?:[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)|(?:\[[0-9A-Fa-f:]+\]))'
+            ~ '(?::[0-9]{1,5})?(?:/[^\s?#\r\n]*)?$')
+          - rawbbit_beszel_hub_key is string
+          - (rawbbit_beszel_hub_key | string | trim | length) > 0
+          - "'\n' not in (rawbbit_beszel_hub_key | string)"
+          - "'\r' not in (rawbbit_beszel_hub_key | string)"
+          - (rawbbit_beszel_hub_key | string | regex_search('[\x00-\x1f\x7f-\x9f]')) is none
+          - >-
+            (rawbbit_beszel_hub_key | string | trim | lower
+            | regex_search('^(change_me|replace_me|replace_with|placeholder|your[_ -])'))
+            is none
+          - beszel_agent_system_name is string
+          - (beszel_agent_system_name | string | trim | length) > 0
+          - "'\n' not in (beszel_agent_system_name | string)"
+          - "'\r' not in (beszel_agent_system_name | string)"
+          - (beszel_agent_system_name | string | regex_search('[\x00-\x1f\x7f-\x9f]')) is none
+          - beszel_agent_smart_devices is sequence
+          - beszel_agent_smart_devices is not string
+          - beszel_agent_smart_devices is not mapping
+        fail_msg: Configure a valid HTTPS Beszel hub, public key, Vault token, and system name.
+      no_log: true
+
+    - name: Validate each configured SMART device mapping
+      ansible.builtin.assert:
+        that:
+          - item is string
+          - >-
+            (item | string) is match('^(?!.*(?:/)\.\.?(/|:|$))/dev/[A-Za-z0-9._+-]+(?:/[A-Za-z0-9._+-]+)*(?::/dev/[A-Za-z0-9._+-]+(?:/[A-Za-z0-9._+-]+)*)?$')
+          - "'/../' not in item"
+          - "'/./' not in item"
+          - "not item.endswith('/..')"
+          - "not item.endswith('/.')"
+        fail_msg: SMART devices must be plain /dev paths, optionally mapped as /dev/source:/dev/target.
+      loop: "{{ beszel_agent_smart_devices }}"
+      loop_control:
+        label: "{{ item if item is string else 'invalid device entry' }}"
+
+    - name: Inspect configured SMART device sources on the host
+      ansible.builtin.stat:
+        path: "{{ item.split(':')[0] }}"
+        follow: true
+      become: true
+      changed_when: false
+      loop: "{{ beszel_agent_smart_devices }}"
+      loop_control:
+        label: "{{ item.split(':')[0] }}"
+      register: beszel_agent_smart_device_stats
+
+    - name: Require each SMART source to be an existing character or block device
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.isblk | default(false) or item.stat.ischr | default(false)
+        fail_msg: Each configured SMART source must exist on the host as a character or block device.
+      loop: "{{ beszel_agent_smart_device_stats.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.split(':')[0] }}"
+
+    - name: Create persistent Beszel agent directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ rawbbit_deploy_user }}"
+        group: "{{ rawbbit_deploy_user }}"
+        mode: "0750"
+      loop:
+        - "{{ beszel_agent_root }}"
+        - "{{ beszel_agent_root }}/data"
+
+    - name: Render protected Beszel agent credentials
+      ansible.builtin.template:
+        src: agent.env.j2
+        dest: "{{ beszel_agent_root }}/agent.env"
+        owner: "{{ rawbbit_deploy_user }}"
+        group: "{{ rawbbit_deploy_user }}"
+        mode: "0600"
+      no_log: true
+
+    - name: Render isolated Beszel agent Compose project
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ beszel_agent_root }}/docker-compose.yml"
+        owner: "{{ rawbbit_deploy_user }}"
+        group: "{{ rawbbit_deploy_user }}"
+        mode: "0644"
+      no_log: true
+
+    - name: Reconcile only the Beszel agent Compose project
+      community.docker.docker_compose_v2:
+        project_src: "{{ beszel_agent_root }}"
+        project_name: "{{ beszel_agent_project_name }}"
+        files:
+          - docker-compose.yml
+        pull: missing
+        state: present
+        wait: true
+        wait_timeout: 60
+      become: false
+      no_log: true
+
+- name: Check whether a Beszel agent Compose project exists when disabled
+  ansible.builtin.stat:
+    path: "{{ beszel_agent_root }}/docker-compose.yml"
+  register: beszel_agent_compose_file
+  when: not (beszel_agent_enabled | bool)
+
+- name: Stop only the existing Beszel agent project when disabled
+  community.docker.docker_compose_v2:
+    project_src: "{{ beszel_agent_root }}"
+    project_name: "{{ beszel_agent_project_name }}"
+    files:
+      - docker-compose.yml
+    state: absent
+    remove_volumes: false
+  become: false
+  no_log: true
+  when:
+    - not (beszel_agent_enabled | bool)
+    - beszel_agent_compose_file.stat.exists

@@ -2,6 +2,11 @@
 # Copy to vault.yml, replace every change_me value, then encrypt:
 # ansible-vault encrypt group_vars/all/vault.yml
 
+# Optional static Dozzle MCP token; generate with `openssl rand -hex 32`.
+# Leave empty to disable.
+vault_rawbbit_one_dozzle_mcp_token: ""
+vault_rawbbit_two_dozzle_mcp_token: ""
+
 vault_rawbbit_one_collector_api_keys:
   change_me_api_key: com.example.app
 vault_rawbbit_one_ip_hash_salt: change_me
@@ -12,6 +17,8 @@ vault_rawbbit_one_s3_reader_secret_key: change_me
 vault_rawbbit_one_s3_admin_access_key: change_me
 vault_rawbbit_one_s3_admin_secret_key: change_me
 vault_rawbbit_one_dozzle_password: change_me
+
+vault_rawbbit_beszel_token: change_me_beszel_universal_token
 
 vault_rawbbit_two_clickhouse_admin_password: change_me
 vault_rawbbit_two_clickhouse_mcp_password: change_me

@@ -23,6 +23,9 @@ rawbbit_two_dozzle_admin_username: admin
 rawbbit_two_dozzle_admin_email: admin@example.com
 rawbbit_two_dozzle_admin_name: Rawbbit Administrator
 rawbbit_two_dozzle_users_revision: 1
+rawbbit_two_beszel_enabled: "{{ rawbbit_beszel_enabled | default(false) }}"
+rawbbit_two_beszel_system_name: rawbbit-two
+rawbbit_two_beszel_smart_devices: []
 rawbbit_two_s3_endpoint: https://s3.example.com
 rawbbit_two_s3_bucket: rawbbit_raw
 rawbbit_two_s3_prefix: raw

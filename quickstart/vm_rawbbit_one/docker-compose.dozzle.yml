@@ -4,7 +4,7 @@ services:
       DOZZLE_PUBLIC_HOSTNAME: ${DOZZLE_PUBLIC_HOSTNAME:?DOZZLE_PUBLIC_HOSTNAME is required}
 
   dozzle:
-    image: amir20/dozzle:v10.6.13
+    image: amir20/dozzle:v11.5.0
     restart: unless-stopped
     logging:
       driver: json-file
@@ -15,6 +15,7 @@ services:
       DOZZLE_AUTH_PROVIDER: simple
       DOZZLE_ENABLE_MCP: "true"
       DOZZLE_HOSTNAME: rawbbit-one
+      DOZZLE_MCP_TOKEN: ${DOZZLE_MCP_TOKEN:-}
     expose:
       - "8080"
     volumes:

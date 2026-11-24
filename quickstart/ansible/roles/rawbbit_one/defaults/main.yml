@@ -8,6 +8,9 @@ rawbbit_one_dozzle_admin_username: admin
 rawbbit_one_dozzle_admin_email: admin@example.com
 rawbbit_one_dozzle_admin_name: Rawbbit Administrator
 rawbbit_one_dozzle_users_revision: 1
+rawbbit_one_beszel_enabled: "{{ rawbbit_beszel_enabled | default(false) }}"
+rawbbit_one_beszel_system_name: rawbbit-one
+rawbbit_one_beszel_smart_devices: []
 rawbbit_one_s3_bucket: rawbbit_raw
 rawbbit_one_s3_prefix: raw
 rawbbit_one_cors_allow_origins: ""

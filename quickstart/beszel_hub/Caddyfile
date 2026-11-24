@@ -1,0 +1,8 @@
+{$BESZEL_DOMAIN} {
+    # reverse_proxy supports WebSocket upgrades; keep long-lived agent connections open.
+    reverse_proxy beszel:8090 {
+        transport http {
+            read_timeout 360s
+        }
+    }
+}

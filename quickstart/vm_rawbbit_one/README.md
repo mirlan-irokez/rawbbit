@@ -844,7 +844,7 @@ Create the Dozzle data directory and first admin user:
 sudo mkdir -p /srv/rawbbit-one/dozzle
 sudo chown -R deploy:deploy /srv/rawbbit-one/dozzle
 
-docker run -it --rm amir20/dozzle:v10.6.13 \
+docker run -it --rm amir20/dozzle:v11.5.0 \
   generate admin \
   --email admin@example.com \
   --name "Admin" \
@@ -896,7 +896,30 @@ Dozzle MCP authentication is separate from Rawbbit MCP authentication. Do not
 put Dozzle tokens in `MCP_API_KEYS_JSON`; that setting belongs only to the
 Rawbbit analytics MCP server.
 
-With Dozzle simple auth, MCP clients need a JWT from Dozzle:
+For long-lived MCP clients, the recommended option is a static token. Generate
+one with `openssl rand -hex 32` and put it in the private `.env`:
+
+```env
+DOZZLE_MCP_TOKEN=your_generated_token
+```
+
+The token must be at least 32 characters. Clients send it to
+`/api/mcp` as:
+
+```text
+Authorization: Bearer YOUR_DOZZLE_MCP_TOKEN
+```
+
+This token does not expire and grants read-only MCP log access to every
+container on this VM, so treat it like a password.
+
+After adding or changing it in `.env`, apply the value with:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dozzle.yml up -d dozzle
+```
+
+Alternatively, with Dozzle simple auth, MCP clients can use a JWT from Dozzle:
 
 ```bash
 DOZZLE_JWT=$(
@@ -919,12 +942,48 @@ Authorization: Bearer YOUR_DOZZLE_JWT
 The MCP endpoint is part of Dozzle's authenticated API group. If the token
 expires, request a new one using the same `/api/token` flow.
 
+The first upgrade from Dozzle 10 to 11 signs everyone out once and invalidates
+existing Dozzle JWTs. Request a new JWT via the same `/api/token` flow and update MCP clients.
+Dozzle stores `session_secret` beside `users.yml` in `/data`; keep the mount
+writable, restrict access to trusted operators, and protect the secret like `users.yml`.
+
 Security notes:
 
 - Do not expose Dozzle without authentication.
 - Do not expose Dozzle's raw container port directly.
 - Keep Dozzle shell and container actions disabled.
 - The Docker socket is sensitive even when mounted read-only.
+
+## Optional Beszel Host Monitoring
+
+Beszel is not part of this Rawbbit Compose project. The Ansible deployment can
+start a pinned Beszel 0.21.2 agent as its own `beszel-agent` Compose project
+after the VM-one stack is running. Deploy the independent
+[Beszel hub](../beszel_hub/README.md) first, then follow the
+[Ansible Beszel instructions](../ansible/README.md#optional-beszel-monitoring).
+
+Enable both VMs with `rawbbit_beszel_enabled: true`, or override this host
+independently with `rawbbit_one_beszel_enabled: true` in the private Ansible
+`main.yml`. Configure the hub HTTPS URL and public key there, and put the
+universal agent token in the encrypted Vault file. This host's default system
+name is `rawbbit-one`; choose a distinct name if it is changed.
+
+SMART is off unless `rawbbit_one_beszel_smart_devices` contains verified
+host-side device paths such as `/dev/nvme0n1` or a
+`/dev/source:/dev/container-target` mapping. The playbook verifies each source
+exists as a host character or block device before writing Beszel files.
+Controller and namespace support varies, and virtual cloud disks often expose
+no SMART data. SMART mode adds `SYS_RAWIO` and `SYS_ADMIN`; this is substantial
+host access.
+
+The agent connects to the hub over outbound HTTPS WebSocket; it opens no
+inbound port and adds no firewall rule. Its Docker socket mount is `:ro`, but
+that does not restrict Docker API operations. Disabling the VM flag stops only
+the Beszel agent and retains its credentials and data under
+`/srv/beszel-agent`. Revoke the shared universal token and purge that directory
+and any backups containing `agent.env` when removal is intended. File deletion
+is not a reliable secure erase on SSDs or snapshots; revocation is the security
+boundary.
 
 ## Verification
 

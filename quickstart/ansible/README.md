@@ -8,14 +8,15 @@ rendering, deployment, and verification.
 ## What it deploys
 
 - `vm_one.yml`: ingestion, NATS JetStream, raw writer, SeaweedFS, Caddy, and
-  authenticated Dozzle
+  authenticated Dozzle, with an optional isolated Beszel agent
 - `vm_two.yml`: ClickHouse, dbt runner, Rawbbit MCP, Metabase, Postgres, Caddy,
-  and authenticated Dozzle
+  and authenticated Dozzle, with an optional isolated Beszel agent
 - `site.yml`: VM one first, then VM two
 
 Either VM can be deployed or rebuilt independently. VM two accepts an existing
 S3-compatible raw-storage endpoint and does not require this playbook to deploy
-VM one.
+VM one. The Beszel hub is a separate Compose deployment on an owner-provided
+third VM; see [the hub quickstart](../beszel_hub/README.md).
 
 ## Workstation requirements
 
@@ -104,8 +105,9 @@ into them. The copied files are the live Ansible inputs and are excluded by
 - `group_vars/all/main.yml` holds **non-secret desired configuration** shared
   with the inventory hosts. Set the administrative CIDR, public DNS names,
   deployment choices, resource profiles, VM-two S3 endpoint, and Dozzle user
-  metadata/revisions here. Edit this file normally when infrastructure or
-  non-secret settings change.
+  metadata/revisions here. Optional Beszel settings include its hub URL/key,
+  global opt-in, per-VM system names, and SMART device paths. Edit this file
+  normally when infrastructure or non-secret settings change.
 - `group_vars/all/vault.yml` holds **secret configuration** such as service
   passwords, API keys, salts, S3 credentials, and Dozzle login passwords.
   Replace the required `change_me` values, encrypt the file before the first
@@ -214,6 +216,17 @@ inside the Vault file:
 vault_rawbbit_one_dozzle_password: "replace_with_a_long_password"
 vault_rawbbit_two_dozzle_password: "replace_with_another_long_password"
 ```
+
+For long-lived Dozzle MCP clients, an optional static token is recommended.
+Generate one with `openssl rand -hex 32` (at least 32 characters), put it in the corresponding
+`vault_rawbbit_one_dozzle_mcp_token` or
+`vault_rawbbit_two_dozzle_mcp_token` value, then rerun that VM's playbook.
+Leave it empty or omit it to keep static-token authentication disabled. MCP
+clients send `Authorization: Bearer <token>` to Dozzle's `/api/mcp` endpoint.
+The token does not expire and grants read-only MCP log access to every
+container on that VM, so treat it like a password. Rotate it by changing the
+Vault value and rerunning the playbook; Compose detects the changed
+configuration and recreates only Dozzle.
 
 Do not run Dozzle's Docker generator manually. After installing Docker,
 Ansible passes each Vault password to the pinned Dozzle image through protected
@@ -332,6 +345,65 @@ generation and file-installation tasks use `no_log: true`.
 The Docker socket is security-sensitive. A read-only filesystem mount does not
 restrict Docker API calls, so Dozzle must remain authenticated and must not be
 exposed through a raw container port.
+
+## Optional Beszel monitoring
+
+Deploy and secure the independent hub first using the
+[Beszel hub quickstart](../beszel_hub/README.md). Beszel agents are disabled by
+default and are not part of either Rawbbit Compose project. To enable both:
+
+```yaml
+rawbbit_beszel_enabled: true
+rawbbit_beszel_hub_url: https://beszel.example.com
+rawbbit_beszel_hub_key: replace_with_the_hub_public_key
+```
+
+Set `vault_rawbbit_beszel_token` in the encrypted Vault file to the universal
+token created in Beszel Settings > Tokens. Enable the token and set it to
+**Permanent** before copying it into Vault. The example placeholder is rejected.
+For a one-VM deployment, the global flag applies to that VM; an inventory or
+`main.yml` value for `rawbbit_one_beszel_enabled` or
+`rawbbit_two_beszel_enabled` can independently override it. The corresponding
+`rawbbit_*_beszel_system_name` values default to `rawbbit-one` and `rawbbit-two`;
+keep names distinct if both agents register with the same hub.
+
+SMART collection is off when the device list is empty. To opt in, configure
+host paths in the target VM's non-secret variables after confirming them on that
+host, for example:
+
+```yaml
+rawbbit_one_beszel_smart_devices:
+  - /dev/nvme0n1
+# or map an explicit container-side path:
+# rawbbit_two_beszel_smart_devices:
+#   - /dev/nvme0:/dev/nvme0
+```
+
+Entries must be plain `/dev/X` paths or `/dev/source:/dev/target` mappings. The
+host source must exist and be a character or block device. A disabled SMART
+configuration does not add device mappings or capabilities. On enable, Ansible
+creates an isolated `beszel-agent` Compose project after the Rawbbit services
+have started, with a protected `0600` environment file. Reruns reconcile only
+that project; token/key changes are applied by Compose's environment-file
+service hash. The `0600` environment file is protected from other unprivileged
+local users, not root or Docker administrators; they can also inspect container
+environment through Docker. Treat host and Docker access as credential access.
+Disabling an agent stops only that project and retains its
+credentials and data under `/srv/beszel-agent` for re-enable. Explicitly revoke
+the shared universal token (which affects every agent using it) and purge that
+directory when removal is intended. Disable and rerun the VM playbook first,
+revoke the token in Beszel, then remove `/srv/beszel-agent` and any retained
+backups containing `agent.env`. File deletion is not a reliable secure erase on
+SSDs, snapshots, or journaled filesystems; revocation is the security boundary.
+
+Agents use outbound HTTPS WebSocket connectivity to the hub. No agent port or
+UFW rule is added, and agent SSH is disabled. The read-only Docker socket mount
+does not restrict Docker API operations. SMART adds `SYS_RAWIO` and `SYS_ADMIN`,
+which grant substantial host access; the agent also scans devices, so the
+configured paths are not a strict allowlist. SMART availability depends on the
+host controller and device namespace; many cloud virtual disks do not expose
+SMART. Device detection failures can fail the Ansible run after Rawbbit has
+started, but do not modify Rawbbit services.
 
 ## VM-two independence
 

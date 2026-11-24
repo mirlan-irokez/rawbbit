@@ -18,6 +18,28 @@
     fail_msg: Replace all VM-one example hostnames and Vault placeholders.
   no_log: true
 
+- name: Validate optional VM-one Dozzle MCP token before deployment writes
+  ansible.builtin.assert:
+    that:
+      - >-
+        (vault_rawbbit_one_dozzle_mcp_token | default('')) is string
+        and
+        (
+          (vault_rawbbit_one_dozzle_mcp_token | default('') | length == 0)
+          or
+          (
+            (vault_rawbbit_one_dozzle_mcp_token | default('') | length >= 32)
+            and
+            (vault_rawbbit_one_dozzle_mcp_token | default('') | regex_search('[\\s\\x00-\\x1f\\x7f-\\x9f]')) is none
+            and
+            (vault_rawbbit_one_dozzle_mcp_token | default('') | lower | regex_search('^(change_me|replace_me|replace_with|placeholder|your[_ -])')) is none
+          )
+        )
+    fail_msg: >-
+      An optional Dozzle MCP token must be empty or a non-placeholder string of
+      at least 32 characters with no whitespace or control characters.
+  no_log: true
+
 - name: Validate VM-one raw-writer throughput settings
   ansible.builtin.assert:
     that:
@@ -308,6 +330,14 @@
 
 - name: Apply pending VM-one service handlers
   ansible.builtin.meta: flush_handlers
+
+- name: Configure optional Beszel agent on VM one
+  ansible.builtin.include_role:
+    name: beszel_agent
+  vars:
+    beszel_agent_enabled: "{{ rawbbit_one_beszel_enabled }}"
+    beszel_agent_system_name: "{{ rawbbit_one_beszel_system_name }}"
+    beszel_agent_smart_devices: "{{ rawbbit_one_beszel_smart_devices }}"
 
 - name: Restart collector after GeoIP database update
   community.docker.docker_compose_v2:

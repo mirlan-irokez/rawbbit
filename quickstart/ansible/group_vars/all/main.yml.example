@@ -9,9 +9,19 @@ rawbbit_manage_ufw: true
 rawbbit_upgrade_packages: true
 rawbbit_validate_tls: true
 
+# Optional host monitoring. Deploy the hub first; VM roles default to disabled.
+rawbbit_beszel_enabled: false
+rawbbit_beszel_hub_url: ""
+rawbbit_beszel_hub_key: ""
+
 rawbbit_one_collector_hostname: collector.example.com
 rawbbit_one_s3_hostname: s3.example.com
 rawbbit_one_dozzle_hostname: logs-one.example.com
+rawbbit_one_beszel_system_name: rawbbit-one
+rawbbit_one_beszel_smart_devices: []
+# Optional per-VM override when monitoring only one host:
+# rawbbit_one_beszel_enabled: true
+# Example: ["/dev/nvme0"]  # or "/dev/nvme0n1:/dev/nvme0" if the controller reports incomplete data
 rawbbit_one_dozzle_admin_username: admin
 rawbbit_one_dozzle_admin_email: admin@example.com
 rawbbit_one_dozzle_admin_name: Rawbbit Administrator
@@ -29,6 +39,11 @@ rawbbit_one_nats_max_ack_pending: 10000
 # 604800  = 7 days
 
 rawbbit_two_mcp_hostname: mcp.example.com
+rawbbit_two_beszel_system_name: rawbbit-two
+rawbbit_two_beszel_smart_devices: []
+# Optional per-VM override when monitoring only one host:
+# rawbbit_two_beszel_enabled: true
+# Example: ["/dev/sda"]
 # Keep the current published image until the dataset-capable MCP release exists.
 rawbbit_two_mcp_path: /mcp
 rawbbit_two_mcp_image: ghcr.io/mirlan-irokez/rawbbit-mcp-server:0.0.4

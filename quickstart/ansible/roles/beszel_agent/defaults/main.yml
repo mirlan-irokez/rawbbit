@@ -1,0 +1,10 @@
+---
+rawbbit_beszel_hub_url: "" # noqa: var-naming[no-role-prefix]
+rawbbit_beszel_hub_key: "" # noqa: var-naming[no-role-prefix]
+
+beszel_agent_enabled: false
+beszel_agent_system_name: ""
+beszel_agent_smart_devices: []
+beszel_agent_root: /srv/beszel-agent
+beszel_agent_project_name: beszel-agent
+beszel_agent_image: henrygd/beszel-agent:0.21.2-alpine

@@ -44,6 +44,9 @@ guides:
   dbt runner, the Rawbbit MCP server, Metabase, and Postgres for Metabase state,
   with optional Dozzle log access
 
+An optional third, small VM can run a Beszel monitoring hub. Beszel agents on
+VM one and VM two report host, container and disk-health (SMART) metrics to it.
+
 The boundary between the VMs is the raw Parquet layer in S3-compatible object
 storage.
 
@@ -97,7 +100,13 @@ For automated provider-neutral deployment of either VM or both, see
 [`quickstart/ansible/README.md`](quickstart/ansible/README.md). The Ansible path
 keeps SSH-key and `deploy` account creation manual, then configures the hosts,
 installs Docker and authenticated Dozzle, renders Vault-backed private
-configuration, starts Compose, and runs health checks.
+configuration, starts Compose, and runs health checks. It can optionally set a
+static Dozzle MCP token and install a Beszel monitoring agent on each VM.
+
+For optional monitoring, see
+[`quickstart/beszel_hub/README.md`](quickstart/beszel_hub/README.md). It deploys
+the Beszel hub on a separate small VM; the Ansible-installed agents connect out
+to it over HTTPS, so the Rawbbit VMs need no new open ports.
 
 For the recommended provider-neutral ingestion VM deployment guide, see
 [`quickstart/vm_rawbbit_one/README.md`](quickstart/vm_rawbbit_one/README.md).
@@ -254,6 +263,7 @@ The included [SQLMesh](https://sqlmesh.readthedocs.io/en/stable/) model is inten
 - [`quickstart/ansible/README.md`](quickstart/ansible/README.md)
 - [`quickstart/vm_rawbbit_one/README.md`](quickstart/vm_rawbbit_one/README.md)
 - [`quickstart/vm_rawbbit_two/README.md`](quickstart/vm_rawbbit_two/README.md)
+- [`quickstart/beszel_hub/README.md`](quickstart/beszel_hub/README.md)
 - [`docs/configuration.md`](docs/configuration.md)
 - [`clickhouse/README.md`](clickhouse/README.md)
 - [`dbt_project/README.md`](dbt_project/README.md)

@@ -242,7 +242,7 @@ Current maturity:
 - The copy-in Unity SDK is a source implementation; Unity Editor compilation, PlayMode tests, and Android/iOS player/device validation are not yet complete, so production compatibility is not established
 - The browser-game SDK source is included and builds independently of other SDK folders; the separate npm package remains private and unpublished
 - The browser-game SDK feature-checks secure top-level capabilities and has a passing Playwright run for Chromium, Firefox, and WebKit; no exact browser/version support matrix or real Safari/mobile-device validation is established.
-- The Rawbbit Game Event Tracking plugins are downloadable from GitHub releases. The Claude plugin is submitted to Anthropic's plugin directory and the Codex plugin is not yet listed in OpenAI's directory; until then, install them from the release ZIPs as described in [`docs/agent-plugins.md`](docs/agent-plugins.md).
+- The Rawbbit Game Event Tracking plugins are downloadable from GitHub releases. The Codex plugin is listed in OpenAI's plugin directory as Rawbbit.one Game Event Tracker. The Claude plugin is submitted to Anthropic's plugin directory; until it is listed, install it from the release ZIP. Both install paths are described in [`docs/agent-plugins.md`](docs/agent-plugins.md).
 
 The current release is intentionally narrow: it focuses on reliable player-event ingestion, durable raw storage, ClickHouse-backed analytics, and agent/BI access on top of that serving layer.
 

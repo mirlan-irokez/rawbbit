@@ -1,4 +1,4 @@
-# Agent plugins: Rawbbit Game Event Tracking
+# Agent plugins for Rawbbit game event tracking
 
 Rawbbit ships a coding-agent plugin that helps you design, integrate, migrate, and maintain game-specific event tracking in a Unity or browser-JavaScript game. It inspects your game, proposes a reviewable event map, and, after you approve specific events, integrates them with the bundled Rawbbit SDK and verifies the result against a mocked Collector.
 
@@ -8,6 +8,8 @@ The same workflow comes in two packages:
 |---|---|---|---|
 | Claude | [`plugins/rawbbit-game-events/claude/`](../plugins/rawbbit-game-events/claude/README.md) | Claude chat, Cowork, and Claude Code | None (skills only) |
 | Codex | [`plugins/rawbbit-game-events/codex/`](../plugins/rawbbit-game-events/codex/README.md) | ChatGPT desktop (Codex) | Optional public, read-only SDK catalog at `https://sdk-catalog.rawbbit.one/mcp` |
+
+In the plugin directories, the Claude package is named **Rawbbit Game Event Tracking** and the Codex package is named **Rawbbit.one Game Event Tracker**.
 
 Both packages include complete Unity and browser-game SDK snapshots, so they work without access to this repository. Neither sends your game source, event payloads, `app_id`, or ingest keys anywhere. Each plugin README has a **What it runs and sends** and a **Privacy** section.
 
@@ -82,7 +84,13 @@ The Claude plugin is submitted to Anthropic's plugin directory. Once it is liste
 
 ## Codex (ChatGPT desktop app)
 
-The Codex plugin requires a local game checkout and desktop execution. Until it is listed in OpenAI's plugin directory, install it in one of these ways.
+The Codex plugin requires a local game checkout and desktop execution.
+
+### From the OpenAI plugin directory
+
+The Codex plugin is listed in OpenAI's plugin directory. In the ChatGPT desktop app, open **Plugins**, find **Rawbbit.one Game Event Tracker**, and install it. Then open your game folder and ask, for example, "Inspect this game and propose a Rawbbit event map without changing code."
+
+To install a specific release instead, use one of the manual options below.
 
 ### Upload the ZIP
 
@@ -111,7 +119,7 @@ The Codex plugin requires a local game checkout and desktop execution. Until it 
          "name": "rawbbit-game-events",
          "source": { "source": "local", "path": "./.codex/plugins/rawbbit-game-events" },
          "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
-         "category": "Developer Tools"
+         "category": "Data & Analytics"
        }
      ]
    }
@@ -119,7 +127,7 @@ The Codex plugin requires a local game checkout and desktop execution. Until it 
 
    If the file already lists other plugins, add the entry to its `plugins` array.
 
-3. Restart the ChatGPT desktop app, open the **Plugins** directory, choose the `rawbbit-local` marketplace, and install **Rawbbit Game Event Tracking**.
+3. Restart the ChatGPT desktop app, open the **Plugins** directory, choose the `rawbbit-local` marketplace, and install **Rawbbit.one Game Event Tracker**.
 
 To update, replace the folder with the new version's contents and restart the app again. The optional SDK catalog connects without sign-in; if it is unreachable, the plugin keeps using its bundled SDKs.
 

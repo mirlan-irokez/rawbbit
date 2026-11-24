@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlsplit
 
 
@@ -15,7 +15,8 @@ SKILL_ROOT = PLUGIN / "skills/rawbbit-game-events"
 LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 REQUIRED = (
     "LICENSE",
-    "rawbbit-icon.svg",
+    "assets/rawbbit-icon.svg",
+    "assets/rawbbit-icon.png",
     "scripts/verify_bundle.py",
     "skills/rawbbit-game-events/assets/sdk/BUNDLE-MANIFEST.json",
     "skills/rawbbit-game-events/assets/sdk/rawbbit-unity/LICENSE",
@@ -33,11 +34,11 @@ REQUIRED = (
 def validate() -> None:
     manifest = json.loads((PLUGIN / ".claude-plugin/plugin.json").read_text())
     required = {"name", "description", "version", "author", "license"}
-    links = ("homepage", "repository", "privacyPolicyUrl", "supportUrl")
-    listing = {"displayName", "keywords", *links}
+    links = ("homepage", "repository", "documentationUrl", "privacyPolicyUrl", "supportUrl", "termsOfServiceUrl")
+    listing = {"displayName", "keywords", "icon", *links}
     if not required <= set(manifest) <= required | listing:
         raise ValueError("Unexpected Claude manifest fields")
-    for key in ("displayName", *links):
+    for key in ("displayName", "icon", *links):
         if key in manifest and not (isinstance(manifest[key], str) and manifest[key].strip()):
             raise ValueError(f"Invalid Claude manifest field: {key}")
     for key in links:
@@ -45,6 +46,12 @@ def validate() -> None:
             url = urlsplit(manifest[key])
             if url.scheme != "https" or not url.netloc:
                 raise ValueError(f"Claude manifest {key} must be an https URL")
+    if "icon" in manifest:
+        icon = PurePosixPath(manifest["icon"])
+        if icon.is_absolute() or ".." in icon.parts or icon.suffix != ".png":
+            raise ValueError("Claude manifest icon must be a relative PNG path inside the plugin")
+        if not (PLUGIN / icon).is_file() or (PLUGIN / icon).is_symlink():
+            raise ValueError("Claude manifest icon file is missing")
     keywords = manifest.get("keywords", [])
     if not isinstance(keywords, list) or not all(isinstance(item, str) and item.strip() for item in keywords):
         raise ValueError("Invalid Claude manifest keywords")
